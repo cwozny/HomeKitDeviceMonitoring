@@ -68,10 +68,15 @@ struct HostCheckTests
     #expect(counter.count == 1)
   }
 
-  private func makeRouter(requestRefresh: @escaping () -> Void = {}) -> WebRouter
+  private func makeRouter(requestRefresh: @escaping () -> Void = ignoreRefresh) -> WebRouter
   {
     WebRouter(content: WebContent(page: Data("<!doctype html>".utf8)), history: ReadingHistory(fileURL: nil), requestRefresh: requestRefresh)
   }
+}
+
+/// Stands in for a refresh in tests that don't count refreshes.
+private func ignoreRefresh()
+{
 }
 
 private final class Counter

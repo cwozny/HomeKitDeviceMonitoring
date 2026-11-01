@@ -31,7 +31,10 @@ struct ReadingHistoryTests
     let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
     // Temperature at 0 s, 90 s, and 12 minutes; humidity at 0 s and 12 minutes. Contact states aren't charted.
     #expect(lines.count == 5)
-    #expect(lines.allSatisfy({ $0.split(separator: "\t").count == 4 }))
+    for line in lines
+    {
+      #expect(line.split(separator: "\t").count == 4)
+    }
   }
 
   @Test("Reloads saved readings when the app starts again")
@@ -57,7 +60,11 @@ struct ReadingHistoryTests
     history.record([sensor(temperature: 21, humidity: 50)], at: start + 720)
     // An hour later, `start` falls exactly on a bucket boundary.
     let payload = try decode(history.payload(at: start + 3_600))
-    let temperature = try #require(payload.series.first(where: { $0.kind == "temperature" }))
+    let temperatures = payload.series.filter
+    {
+      $0.kind == "temperature"
+    }
+    let temperature = try #require(temperatures.first)
     let unit = UnitTemperature(forLocale: .current, usage: .weather)
     let average = Measurement(value: 20.5, unit: UnitTemperature.celsius).converted(to: unit).value
     #expect(temperature.unit == unit.symbol)

@@ -129,7 +129,10 @@ final class ReadingHistory: @unchecked Sendable
     var earliest: TimeInterval?
     for key in keys
     {
-      let recent = (snapshot[key] ?? []).drop(while: { $0.time < start })
+      let recent = (snapshot[key] ?? []).filter
+      {
+        $0.time >= start
+      }
       guard let first = recent.first, let name = key.kind.historyKey, let style = ChartStyle(kind: key.kind, temperatureUnit: temperatureUnit) else
       {
         continue
@@ -146,10 +149,15 @@ final class ReadingHistory: @unchecked Sendable
         points: Self.buckets(recent, start: start, convert: style.convert)
       ))
     }
+    var recordingSince: Int?
+    if let earliest
+    {
+      recordingSince = Int(earliest)
+    }
     let payload = HistoryPayload(
       now: Int(now),
       start: Int(start),
-      recordingSince: earliest.map { Int($0) },
+      recordingSince: recordingSince,
       bucketSeconds: Int(Self.bucketSeconds),
       series: list
     )
@@ -157,7 +165,7 @@ final class ReadingHistory: @unchecked Sendable
   }
 
   /// Averages samples into fixed buckets and returns [time, value] pairs in display units.
-  private static func buckets(_ samples: ArraySlice<Sample>, start: TimeInterval, convert: (Double) -> Double) -> [[Double]]
+  private static func buckets(_ samples: [Sample], start: TimeInterval, convert: (Double) -> Double) -> [[Double]]
   {
     var points: [[Double]] = []
     var current = -1
@@ -285,7 +293,10 @@ final class ReadingHistory: @unchecked Sendable
       var result: [Key: [Sample]] = [:]
       for (key, samples) in series
       {
-        let recent = Array(samples.drop(while: { $0.time < cutoff }))
+        let recent = samples.filter
+        {
+          $0.time >= cutoff
+        }
         if !recent.isEmpty
         {
           result[key] = recent
@@ -352,7 +363,8 @@ struct ChartStyle
   var decimals: Int
   var minimumSpan: Double
   var nonNegative = true
-  var convert: (Double) -> Double = { $0 }
+  /// Set for temperatures, which HomeKit reports in Celsius.
+  var temperatureUnit: UnitTemperature?
 
   init?(kind: Reading.Kind, temperatureUnit: UnitTemperature)
   {
@@ -364,7 +376,7 @@ struct ChartStyle
       decimals = 1
       minimumSpan = temperatureUnit == .fahrenheit ? 4 : 2
       nonNegative = false
-      convert = { Measurement(value: $0, unit: UnitTemperature.celsius).converted(to: temperatureUnit).value }
+      self.temperatureUnit = temperatureUnit
     case .humidity:
       unit = "%"
       decimals = 0
@@ -392,6 +404,16 @@ struct ChartStyle
     default:
       return nil
     }
+  }
+
+  /// Converts a raw HomeKit value into `unit`.
+  func convert(_ value: Double) -> Double
+  {
+    guard let temperatureUnit else
+    {
+      return value
+    }
+    return Measurement(value: value, unit: UnitTemperature.celsius).converted(to: temperatureUnit).value
   }
 }
 
@@ -427,11 +449,12 @@ extension Reading.Kind
 
   init?(historyKey: String)
   {
-    guard let kind = Self.charted.first(where: { $0.historyKey == historyKey }) else
+    for kind in Self.charted where kind.historyKey == historyKey
     {
-      return nil
+      self = kind
+      return
     }
-    self = kind
+    return nil
   }
 }
 

@@ -113,7 +113,7 @@ func exchange(port: UInt16, request: String) async throws -> (reply: String, sec
       case .ready:
         if !request.isEmpty
         {
-          connection.send(content: Data(request.utf8), completion: .contentProcessed({ _ in }))
+          connection.send(content: Data(request.utf8), completion: .contentProcessed(ignoreSendResult))
         }
         receive()
       case .failed(let error):
@@ -125,4 +125,10 @@ func exchange(port: UInt16, request: String) async throws -> (reply: String, sec
     connection.start(queue: queue)
   }
   return (reply, Date.now.timeIntervalSince(start))
+}
+
+/// A failed send shows up as a failed receive, so the send result itself doesn't matter.
+@Sendable
+private func ignoreSendResult(_ error: NWError?)
+{
 }
