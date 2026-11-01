@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Observation
 
 /// Serves the dashboard as a web page so phones on the same network can open it.
@@ -162,6 +163,10 @@ struct WebRouter
 
   func response(for request: HTTPServer.Request) -> HTTPServer.Response
   {
+    guard let host = request.host, Self.allows(host: host) else
+    {
+      return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or a Tailscale name.")
+    }
     switch (request.method, request.path)
     {
     case ("GET", "/"), ("GET", "/index.html"):
@@ -178,5 +183,21 @@ struct WebRouter
     default:
       return .text("404 Not Found", "Not found")
     }
+  }
+
+  /// Blocks DNS rebinding. A web page on another site can make a visitor's browser connect to this Mac,
+  /// but the browser then sends that site's name as the host, and public names aren't on this list.
+  static func allows(host: String) -> Bool
+  {
+    if host == "localhost" || IPv4Address(host) != nil || IPv6Address(host) != nil
+    {
+      return true
+    }
+    // Single-label names, such as Tailscale's short machine names, don't come from public DNS.
+    if !host.contains(".")
+    {
+      return true
+    }
+    return host.hasSuffix(".local") || host.hasSuffix(".ts.net")
   }
 }

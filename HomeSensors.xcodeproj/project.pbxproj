@@ -6,8 +6,19 @@
   objectVersion = 77;
   objects = {
 
+/* Begin PBXContainerItemProxy section */
+    7A3C1E0F2B6D4A590000001E /* PBXContainerItemProxy */ = {
+      isa = PBXContainerItemProxy;
+      containerPortal = 7A3C1E0F2B6D4A590000000A /* Project object */;
+      proxyType = 1;
+      remoteGlobalIDString = 7A3C1E0F2B6D4A5900000006;
+      remoteInfo = HomeSensors;
+    };
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
     7A3C1E0F2B6D4A5900000001 /* HomeSensors.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HomeSensors.app; sourceTree = BUILT_PRODUCTS_DIR; };
+    7A3C1E0F2B6D4A5900000014 /* HomeSensorsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HomeSensorsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
     7A3C1E0F2B6D4A5900000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
     7A3C1E0F2B6D4A5900000012 /* HomeSensors.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HomeSensors.entitlements; sourceTree = "<group>"; };
     7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
@@ -19,10 +30,22 @@
       path = HomeSensors;
       sourceTree = "<group>";
     };
+    7A3C1E0F2B6D4A5900000015 /* HomeSensorsTests */ = {
+      isa = PBXFileSystemSynchronizedRootGroup;
+      path = HomeSensorsTests;
+      sourceTree = "<group>";
+    };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
     7A3C1E0F2B6D4A5900000003 /* Frameworks */ = {
+      isa = PBXFrameworksBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+    7A3C1E0F2B6D4A5900000019 /* Frameworks */ = {
       isa = PBXFrameworksBuildPhase;
       buildActionMask = 2147483647;
       files = (
@@ -36,6 +59,7 @@
       isa = PBXGroup;
       children = (
         7A3C1E0F2B6D4A5900000002 /* HomeSensors */,
+        7A3C1E0F2B6D4A5900000015 /* HomeSensorsTests */,
         7A3C1E0F2B6D4A5900000010 /* Support */,
         7A3C1E0F2B6D4A5900000005 /* Products */,
       );
@@ -45,6 +69,7 @@
       isa = PBXGroup;
       children = (
         7A3C1E0F2B6D4A5900000001 /* HomeSensors.app */,
+        7A3C1E0F2B6D4A5900000014 /* HomeSensorsTests.xctest */,
       );
       name = Products;
       sourceTree = "<group>";
@@ -84,6 +109,29 @@
       productReference = 7A3C1E0F2B6D4A5900000001 /* HomeSensors.app */;
       productType = "com.apple.product-type.application";
     };
+    7A3C1E0F2B6D4A5900000016 /* HomeSensorsTests */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = 7A3C1E0F2B6D4A5900000017 /* Build configuration list for PBXNativeTarget "HomeSensorsTests" */;
+      buildPhases = (
+        7A3C1E0F2B6D4A5900000018 /* Sources */,
+        7A3C1E0F2B6D4A5900000019 /* Frameworks */,
+        7A3C1E0F2B6D4A590000001A /* Resources */,
+      );
+      buildRules = (
+      );
+      dependencies = (
+        7A3C1E0F2B6D4A590000001D /* PBXTargetDependency */,
+      );
+      fileSystemSynchronizedGroups = (
+        7A3C1E0F2B6D4A5900000015 /* HomeSensorsTests */,
+      );
+      name = HomeSensorsTests;
+      packageProductDependencies = (
+      );
+      productName = HomeSensorsTests;
+      productReference = 7A3C1E0F2B6D4A5900000014 /* HomeSensorsTests.xctest */;
+      productType = "com.apple.product-type.bundle.unit-test";
+    };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -96,6 +144,10 @@
         TargetAttributes = {
           7A3C1E0F2B6D4A5900000006 = {
             CreatedOnToolsVersion = 27.2;
+          };
+          7A3C1E0F2B6D4A5900000016 = {
+            CreatedOnToolsVersion = 27.2;
+            TestTargetID = 7A3C1E0F2B6D4A5900000006;
           };
         };
       };
@@ -114,12 +166,20 @@
       projectRoot = "";
       targets = (
         7A3C1E0F2B6D4A5900000006 /* HomeSensors */,
+        7A3C1E0F2B6D4A5900000016 /* HomeSensorsTests */,
       );
     };
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
     7A3C1E0F2B6D4A5900000009 /* Resources */ = {
+      isa = PBXResourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+    7A3C1E0F2B6D4A590000001A /* Resources */ = {
       isa = PBXResourcesBuildPhase;
       buildActionMask = 2147483647;
       files = (
@@ -136,7 +196,22 @@
       );
       runOnlyForDeploymentPostprocessing = 0;
     };
+    7A3C1E0F2B6D4A5900000018 /* Sources */ = {
+      isa = PBXSourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+    7A3C1E0F2B6D4A590000001D /* PBXTargetDependency */ = {
+      isa = PBXTargetDependency;
+      target = 7A3C1E0F2B6D4A5900000006 /* HomeSensors */;
+      targetProxy = 7A3C1E0F2B6D4A590000001E /* PBXContainerItemProxy */;
+    };
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
     7A3C1E0F2B6D4A590000000C /* Debug */ = {
@@ -243,6 +318,50 @@
       };
       name = Release;
     };
+    7A3C1E0F2B6D4A590000001B /* Debug */ = {
+      isa = XCBuildConfiguration;
+      baseConfigurationReference = 7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */;
+      buildSettings = {
+        BUNDLE_LOADER = "$(TEST_HOST)";
+        CODE_SIGN_STYLE = Automatic;
+        CURRENT_PROJECT_VERSION = 1;
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+        GENERATE_INFOPLIST_FILE = YES;
+        MARKETING_VERSION = 1.0;
+        PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).Tests";
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+        SUPPORTS_MACCATALYST = YES;
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+        SWIFT_EMIT_LOC_STRINGS = NO;
+        SWIFT_VERSION = 5.0;
+        TARGETED_DEVICE_FAMILY = "1,2,6";
+        TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HomeSensors.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HomeSensors";
+      };
+      name = Debug;
+    };
+    7A3C1E0F2B6D4A590000001C /* Release */ = {
+      isa = XCBuildConfiguration;
+      baseConfigurationReference = 7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */;
+      buildSettings = {
+        BUNDLE_LOADER = "$(TEST_HOST)";
+        CODE_SIGN_STYLE = Automatic;
+        CURRENT_PROJECT_VERSION = 1;
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+        GENERATE_INFOPLIST_FILE = YES;
+        MARKETING_VERSION = 1.0;
+        PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).Tests";
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+        SUPPORTS_MACCATALYST = YES;
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+        SWIFT_EMIT_LOC_STRINGS = NO;
+        SWIFT_VERSION = 5.0;
+        TARGETED_DEVICE_FAMILY = "1,2,6";
+        TEST_HOST = "$(BUILT_PRODUCTS_DIR)/HomeSensors.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HomeSensors";
+      };
+      name = Release;
+    };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -251,6 +370,15 @@
       buildConfigurations = (
         7A3C1E0F2B6D4A590000000E /* Debug */,
         7A3C1E0F2B6D4A590000000F /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+    7A3C1E0F2B6D4A5900000017 /* Build configuration list for PBXNativeTarget "HomeSensorsTests" */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        7A3C1E0F2B6D4A590000001B /* Debug */,
+        7A3C1E0F2B6D4A590000001C /* Release */,
       );
       defaultConfigurationIsVisible = 0;
       defaultConfigurationName = Release;

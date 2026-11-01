@@ -10,7 +10,7 @@
         ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
         <ActionContent
           title = "Copy signed Mac app to project folder"
-          scriptText = "# Copies the signed Mac app into the project folder after each successful build.&#10;# Skips iOS builds and unsigned builds so a working signed copy is never replaced.&#10;set -eu&#10;[ &quot;${IS_MACCATALYST:-NO}&quot; = &quot;YES&quot; ] || exit 0&#10;[ &quot;${CODE_SIGNING_ALLOWED:-NO}&quot; = &quot;YES&quot; ] || exit 0&#10;SOURCE=&quot;${TARGET_BUILD_DIR:?}/${FULL_PRODUCT_NAME:?}&quot;&#10;DESTINATION=&quot;${SRCROOT:?}/${FULL_PRODUCT_NAME:?}&quot;&#10;codesign --verify --strict &quot;$SOURCE&quot; || exit 0&#10;rm -rf &quot;$DESTINATION&quot;&#10;ditto &quot;$SOURCE&quot; &quot;$DESTINATION&quot;&#10;"
+          scriptText = "# Copies the signed Mac app into the project folder after each successful build.&#10;# Skips iOS builds and unsigned builds so a working signed copy is never replaced.&#10;set -eu&#10;[ &quot;${IS_MACCATALYST:-NO}&quot; = &quot;YES&quot; ] || exit 0&#10;[ &quot;${CODE_SIGNING_ALLOWED:-NO}&quot; = &quot;YES&quot; ] || exit 0&#10;SOURCE=&quot;${TARGET_BUILD_DIR:?}/${FULL_PRODUCT_NAME:?}&quot;&#10;DESTINATION=&quot;${SRCROOT:?}/${FULL_PRODUCT_NAME:?}&quot;&#10;# Skips builds for testing, which put the test bundle inside the app.&#10;[ -z &quot;$(find &quot;$SOURCE/Contents/PlugIns&quot; -maxdepth 1 -name &apos;*.xctest&apos; 2&gt;/dev/null)&quot; ] || exit 0&#10;codesign --verify --strict &quot;$SOURCE&quot; || exit 0&#10;rm -rf &quot;$DESTINATION&quot;&#10;ditto &quot;$SOURCE&quot; &quot;$DESTINATION&quot;&#10;"
           shellToInvoke = "/bin/sh">
           <EnvironmentBuildable>
             <BuildableReference
@@ -39,6 +39,20 @@
           ReferencedContainer = "container:HomeSensors.xcodeproj">
         </BuildableReference>
       </BuildActionEntry>
+      <BuildActionEntry
+        buildForTesting = "YES"
+        buildForRunning = "NO"
+        buildForProfiling = "NO"
+        buildForArchiving = "NO"
+        buildForAnalyzing = "NO">
+        <BuildableReference
+          BuildableIdentifier = "primary"
+          BlueprintIdentifier = "7A3C1E0F2B6D4A5900000016"
+          BuildableName = "HomeSensorsTests.xctest"
+          BlueprintName = "HomeSensorsTests"
+          ReferencedContainer = "container:HomeSensors.xcodeproj">
+        </BuildableReference>
+      </BuildActionEntry>
     </BuildActionEntries>
   </BuildAction>
   <TestAction
@@ -46,6 +60,19 @@
     selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
     selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
     shouldUseLaunchSchemeArgsEnv = "YES">
+    <Testables>
+      <TestableReference
+        skipped = "NO"
+        parallelizable = "NO">
+        <BuildableReference
+          BuildableIdentifier = "primary"
+          BlueprintIdentifier = "7A3C1E0F2B6D4A5900000016"
+          BuildableName = "HomeSensorsTests.xctest"
+          BlueprintName = "HomeSensorsTests"
+          ReferencedContainer = "container:HomeSensors.xcodeproj">
+        </BuildableReference>
+      </TestableReference>
+    </Testables>
   </TestAction>
   <LaunchAction
     buildConfiguration = "Debug"
