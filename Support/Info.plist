@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSHomeKitUsageDescription</key>
+  <string>Home Sensors reads battery levels and sensor readings from your accessories to show them on its dashboard. It does not change your accessories.</string>
+  <key>NSLocalNetworkUsageDescription</key>
+  <string>Home Sensors serves its dashboard as a web page to phones and computers on your local network.</string>
+</dict>
+</plist>

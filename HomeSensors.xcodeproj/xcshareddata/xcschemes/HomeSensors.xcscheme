@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Scheme
+  LastUpgradeVersion = "2720"
+  version = "1.7">
+  <BuildAction
+    parallelizeBuildables = "YES"
+    buildImplicitDependencies = "YES">
+    <PostActions>
+      <ExecutionAction
+        ActionType = "Xcode.IDEStandardExecutionActionsCore.ExecutionActionType.ShellScriptAction">
+        <ActionContent
+          title = "Copy signed Mac app to project folder"
+          scriptText = "# Copies the signed Mac app into the project folder after each successful build.&#10;# Skips iOS builds and unsigned builds so a working signed copy is never replaced.&#10;set -eu&#10;[ &quot;${IS_MACCATALYST:-NO}&quot; = &quot;YES&quot; ] || exit 0&#10;[ &quot;${CODE_SIGNING_ALLOWED:-NO}&quot; = &quot;YES&quot; ] || exit 0&#10;SOURCE=&quot;${TARGET_BUILD_DIR:?}/${FULL_PRODUCT_NAME:?}&quot;&#10;DESTINATION=&quot;${SRCROOT:?}/${FULL_PRODUCT_NAME:?}&quot;&#10;codesign --verify --strict &quot;$SOURCE&quot; || exit 0&#10;rm -rf &quot;$DESTINATION&quot;&#10;ditto &quot;$SOURCE&quot; &quot;$DESTINATION&quot;&#10;"
+          shellToInvoke = "/bin/sh">
+          <EnvironmentBuildable>
+            <BuildableReference
+              BuildableIdentifier = "primary"
+              BlueprintIdentifier = "7A3C1E0F2B6D4A5900000006"
+              BuildableName = "HomeSensors.app"
+              BlueprintName = "HomeSensors"
+              ReferencedContainer = "container:HomeSensors.xcodeproj">
+            </BuildableReference>
+          </EnvironmentBuildable>
+        </ActionContent>
+      </ExecutionAction>
+    </PostActions>
+    <BuildActionEntries>
+      <BuildActionEntry
+        buildForTesting = "YES"
+        buildForRunning = "YES"
+        buildForProfiling = "YES"
+        buildForArchiving = "YES"
+        buildForAnalyzing = "YES">
+        <BuildableReference
+          BuildableIdentifier = "primary"
+          BlueprintIdentifier = "7A3C1E0F2B6D4A5900000006"
+          BuildableName = "HomeSensors.app"
+          BlueprintName = "HomeSensors"
+          ReferencedContainer = "container:HomeSensors.xcodeproj">
+        </BuildableReference>
+      </BuildActionEntry>
+    </BuildActionEntries>
+  </BuildAction>
+  <TestAction
+    buildConfiguration = "Debug"
+    selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+    selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+    shouldUseLaunchSchemeArgsEnv = "YES">
+  </TestAction>
+  <LaunchAction
+    buildConfiguration = "Debug"
+    selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
+    selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
+    launchStyle = "0"
+    useCustomWorkingDirectory = "NO"
+    ignoresPersistentStateOnLaunch = "NO"
+    debugDocumentVersioning = "YES"
+    debugServiceExtension = "internal"
+    allowLocationSimulation = "YES">
+    <BuildableProductRunnable
+      runnableDebuggingMode = "0">
+      <BuildableReference
+        BuildableIdentifier = "primary"
+        BlueprintIdentifier = "7A3C1E0F2B6D4A5900000006"
+        BuildableName = "HomeSensors.app"
+        BlueprintName = "HomeSensors"
+        ReferencedContainer = "container:HomeSensors.xcodeproj">
+      </BuildableReference>
+    </BuildableProductRunnable>
+  </LaunchAction>
+  <ProfileAction
+    buildConfiguration = "Release"
+    shouldUseLaunchSchemeArgsEnv = "YES"
+    savedToolIdentifier = ""
+    useCustomWorkingDirectory = "NO"
+    debugDocumentVersioning = "YES">
+    <BuildableProductRunnable
+      runnableDebuggingMode = "0">
+      <BuildableReference
+        BuildableIdentifier = "primary"
+        BlueprintIdentifier = "7A3C1E0F2B6D4A5900000006"
+        BuildableName = "HomeSensors.app"
+        BlueprintName = "HomeSensors"
+        ReferencedContainer = "container:HomeSensors.xcodeproj">
+      </BuildableReference>
+    </BuildableProductRunnable>
+  </ProfileAction>
+  <AnalyzeAction
+    buildConfiguration = "Debug">
+  </AnalyzeAction>
+  <ArchiveAction
+    buildConfiguration = "Release"
+    revealArchiveInOrganizer = "YES">
+  </ArchiveAction>
+</Scheme>

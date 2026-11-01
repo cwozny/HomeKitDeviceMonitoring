@@ -1,0 +1,15 @@
+// Signing settings for the HomeSensors target.
+//
+// Put your own team and bundle identifier in Local.xcconfig next to this file.
+// Git ignores Local.xcconfig, so they stay out of the repository. For example:
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   PRODUCT_BUNDLE_IDENTIFIER = com.example.yourname.HomeSensors
+//
+// Reading HomeKit data needs an App ID with the HomeKit capability, so build for iOS once
+// with automatic signing before the first Mac build.
+
+DEVELOPMENT_TEAM =
+PRODUCT_BUNDLE_IDENTIFIER = com.example.HomeSensors
+
+#include? "Local.xcconfig"

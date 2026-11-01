@@ -1,0 +1,270 @@
+// !$*UTF8*$!
+{
+  archiveVersion = 1;
+  classes = {
+  };
+  objectVersion = 77;
+  objects = {
+
+/* Begin PBXFileReference section */
+    7A3C1E0F2B6D4A5900000001 /* HomeSensors.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HomeSensors.app; sourceTree = BUILT_PRODUCTS_DIR; };
+    7A3C1E0F2B6D4A5900000011 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+    7A3C1E0F2B6D4A5900000012 /* HomeSensors.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = HomeSensors.entitlements; sourceTree = "<group>"; };
+    7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+    7A3C1E0F2B6D4A5900000002 /* HomeSensors */ = {
+      isa = PBXFileSystemSynchronizedRootGroup;
+      path = HomeSensors;
+      sourceTree = "<group>";
+    };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+    7A3C1E0F2B6D4A5900000003 /* Frameworks */ = {
+      isa = PBXFrameworksBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+    7A3C1E0F2B6D4A5900000004 = {
+      isa = PBXGroup;
+      children = (
+        7A3C1E0F2B6D4A5900000002 /* HomeSensors */,
+        7A3C1E0F2B6D4A5900000010 /* Support */,
+        7A3C1E0F2B6D4A5900000005 /* Products */,
+      );
+      sourceTree = "<group>";
+    };
+    7A3C1E0F2B6D4A5900000005 /* Products */ = {
+      isa = PBXGroup;
+      children = (
+        7A3C1E0F2B6D4A5900000001 /* HomeSensors.app */,
+      );
+      name = Products;
+      sourceTree = "<group>";
+    };
+    7A3C1E0F2B6D4A5900000010 /* Support */ = {
+      isa = PBXGroup;
+      children = (
+        7A3C1E0F2B6D4A5900000012 /* HomeSensors.entitlements */,
+        7A3C1E0F2B6D4A5900000011 /* Info.plist */,
+        7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */,
+      );
+      path = Support;
+      sourceTree = "<group>";
+    };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+    7A3C1E0F2B6D4A5900000006 /* HomeSensors */ = {
+      isa = PBXNativeTarget;
+      buildConfigurationList = 7A3C1E0F2B6D4A5900000007 /* Build configuration list for PBXNativeTarget "HomeSensors" */;
+      buildPhases = (
+        7A3C1E0F2B6D4A5900000008 /* Sources */,
+        7A3C1E0F2B6D4A5900000003 /* Frameworks */,
+        7A3C1E0F2B6D4A5900000009 /* Resources */,
+      );
+      buildRules = (
+      );
+      dependencies = (
+      );
+      fileSystemSynchronizedGroups = (
+        7A3C1E0F2B6D4A5900000002 /* HomeSensors */,
+      );
+      name = HomeSensors;
+      packageProductDependencies = (
+      );
+      productName = HomeSensors;
+      productReference = 7A3C1E0F2B6D4A5900000001 /* HomeSensors.app */;
+      productType = "com.apple.product-type.application";
+    };
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+    7A3C1E0F2B6D4A590000000A /* Project object */ = {
+      isa = PBXProject;
+      attributes = {
+        BuildIndependentTargetsInParallel = 1;
+        LastSwiftUpdateCheck = 2720;
+        LastUpgradeCheck = 2720;
+        TargetAttributes = {
+          7A3C1E0F2B6D4A5900000006 = {
+            CreatedOnToolsVersion = 27.2;
+          };
+        };
+      };
+      buildConfigurationList = 7A3C1E0F2B6D4A590000000B /* Build configuration list for PBXProject "HomeSensors" */;
+      developmentRegion = en;
+      hasScannedForEncodings = 0;
+      knownRegions = (
+        en,
+        Base,
+      );
+      mainGroup = 7A3C1E0F2B6D4A5900000004;
+      minimizedProjectReferenceProxies = 1;
+      preferredProjectObjectVersion = 77;
+      productRefGroup = 7A3C1E0F2B6D4A5900000005 /* Products */;
+      projectDirPath = "";
+      projectRoot = "";
+      targets = (
+        7A3C1E0F2B6D4A5900000006 /* HomeSensors */,
+      );
+    };
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+    7A3C1E0F2B6D4A5900000009 /* Resources */ = {
+      isa = PBXResourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+    7A3C1E0F2B6D4A5900000008 /* Sources */ = {
+      isa = PBXSourcesBuildPhase;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+    };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+    7A3C1E0F2B6D4A590000000C /* Debug */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        ALWAYS_SEARCH_USER_PATHS = NO;
+        CLANG_ENABLE_MODULES = YES;
+        CLANG_ENABLE_OBJC_ARC = YES;
+        COPY_PHASE_STRIP = NO;
+        DEBUG_INFORMATION_FORMAT = dwarf;
+        ENABLE_STRICT_OBJC_MSGSEND = YES;
+        ENABLE_TESTABILITY = YES;
+        GCC_C_LANGUAGE_STANDARD = gnu17;
+        GCC_NO_COMMON_BLOCKS = YES;
+        GCC_OPTIMIZATION_LEVEL = 0;
+        GCC_PREPROCESSOR_DEFINITIONS = (
+          "DEBUG=1",
+          "$(inherited)",
+        );
+        IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+        MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+        ONLY_ACTIVE_ARCH = YES;
+        SDKROOT = iphoneos;
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+        SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+      };
+      name = Debug;
+    };
+    7A3C1E0F2B6D4A590000000D /* Release */ = {
+      isa = XCBuildConfiguration;
+      buildSettings = {
+        ALWAYS_SEARCH_USER_PATHS = NO;
+        CLANG_ENABLE_MODULES = YES;
+        CLANG_ENABLE_OBJC_ARC = YES;
+        COPY_PHASE_STRIP = NO;
+        DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+        ENABLE_NS_ASSERTIONS = NO;
+        ENABLE_STRICT_OBJC_MSGSEND = YES;
+        GCC_C_LANGUAGE_STANDARD = gnu17;
+        GCC_NO_COMMON_BLOCKS = YES;
+        IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+        MTL_ENABLE_DEBUG_INFO = NO;
+        SDKROOT = iphoneos;
+        SWIFT_COMPILATION_MODE = wholemodule;
+        VALIDATE_PRODUCT = YES;
+      };
+      name = Release;
+    };
+    7A3C1E0F2B6D4A590000000E /* Debug */ = {
+      isa = XCBuildConfiguration;
+      baseConfigurationReference = 7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */;
+      buildSettings = {
+        CODE_SIGN_ENTITLEMENTS = Support/HomeSensors.entitlements;
+        CODE_SIGN_STYLE = Automatic;
+        CURRENT_PROJECT_VERSION = 1;
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+        ENABLE_PREVIEWS = YES;
+        GENERATE_INFOPLIST_FILE = YES;
+        INFOPLIST_FILE = Support/Info.plist;
+        INFOPLIST_KEY_CFBundleDisplayName = "Home Sensors";
+        INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+        INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+        MARKETING_VERSION = 1.0;
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+        SUPPORTS_MACCATALYST = YES;
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+        SWIFT_EMIT_LOC_STRINGS = YES;
+        SWIFT_VERSION = 5.0;
+        TARGETED_DEVICE_FAMILY = "1,2,6";
+      };
+      name = Debug;
+    };
+    7A3C1E0F2B6D4A590000000F /* Release */ = {
+      isa = XCBuildConfiguration;
+      baseConfigurationReference = 7A3C1E0F2B6D4A5900000013 /* Signing.xcconfig */;
+      buildSettings = {
+        CODE_SIGN_ENTITLEMENTS = Support/HomeSensors.entitlements;
+        CODE_SIGN_STYLE = Automatic;
+        CURRENT_PROJECT_VERSION = 1;
+        DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+        ENABLE_PREVIEWS = YES;
+        GENERATE_INFOPLIST_FILE = YES;
+        INFOPLIST_FILE = Support/Info.plist;
+        INFOPLIST_KEY_CFBundleDisplayName = "Home Sensors";
+        INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+        INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+        MARKETING_VERSION = 1.0;
+        PRODUCT_NAME = "$(TARGET_NAME)";
+        SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+        SUPPORTS_MACCATALYST = YES;
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+        SWIFT_EMIT_LOC_STRINGS = YES;
+        SWIFT_VERSION = 5.0;
+        TARGETED_DEVICE_FAMILY = "1,2,6";
+      };
+      name = Release;
+    };
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+    7A3C1E0F2B6D4A5900000007 /* Build configuration list for PBXNativeTarget "HomeSensors" */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        7A3C1E0F2B6D4A590000000E /* Debug */,
+        7A3C1E0F2B6D4A590000000F /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+    7A3C1E0F2B6D4A590000000B /* Build configuration list for PBXProject "HomeSensors" */ = {
+      isa = XCConfigurationList;
+      buildConfigurations = (
+        7A3C1E0F2B6D4A590000000C /* Debug */,
+        7A3C1E0F2B6D4A590000000D /* Release */,
+      );
+      defaultConfigurationIsVisible = 0;
+      defaultConfigurationName = Release;
+    };
+/* End XCConfigurationList section */
+  };
+  rootObject = 7A3C1E0F2B6D4A590000000A /* Project object */;
+}

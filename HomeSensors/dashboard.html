@@ -1,0 +1,1778 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Home Sensors">
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+  <title>Home Sensors</title>
+  <style>
+    :root
+    {
+      --bg: #f2f2f7;
+      --card: #ffffff;
+      --ink: #000000;
+      --ink-2: rgba(60, 60, 67, 0.64);
+      --ink-3: rgba(60, 60, 67, 0.34);
+      --hairline: rgba(60, 60, 67, 0.16);
+      --accent: #007aff;
+      --warning: #fab219;
+      --serious: #ec835a;
+      --critical: #d03b3b;
+      --segment: rgba(118, 118, 128, 0.12);
+      --segment-on: #ffffff;
+      --segment-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+
+    @media (prefers-color-scheme: dark)
+    {
+      :root
+      {
+        --bg: #000000;
+        --card: #1c1c1e;
+        --ink: #ffffff;
+        --ink-2: rgba(235, 235, 245, 0.64);
+        --ink-3: rgba(235, 235, 245, 0.34);
+        --hairline: rgba(84, 84, 88, 0.55);
+        --accent: #0a84ff;
+        --segment: rgba(118, 118, 128, 0.24);
+        --segment-on: #636366;
+        --segment-shadow: none;
+      }
+    }
+
+    *
+    {
+      box-sizing: border-box;
+    }
+
+    [hidden]
+    {
+      display: none !important;
+    }
+
+    html
+    {
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body
+    {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.35 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    }
+
+    main
+    {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    }
+
+    header
+    {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 8px 0 16px;
+    }
+
+    h1
+    {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .updated
+    {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--ink-2);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .refresh
+    {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 0;
+      border-radius: 18px;
+      background: var(--card);
+      color: var(--accent);
+      cursor: pointer;
+    }
+
+    .refresh svg
+    {
+      width: 18px;
+      height: 18px;
+    }
+
+    .refresh.spinning svg
+    {
+      animation: spin 1s linear infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce)
+    {
+      .refresh.spinning svg
+      {
+        animation: none;
+      }
+    }
+
+    @keyframes spin
+    {
+      to
+      {
+        transform: rotate(360deg);
+      }
+    }
+
+    .banner
+    {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--card);
+      font-size: 14px;
+    }
+
+    #content
+    {
+      transition: opacity 0.2s;
+    }
+
+    #content.stale
+    {
+      opacity: 0.55;
+    }
+
+    .tiles
+    {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .tile
+    {
+      min-width: 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--card);
+    }
+
+    .tile .label
+    {
+      color: var(--ink-2);
+      font-size: 13px;
+    }
+
+    .tile .value
+    {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 2px 0;
+      font-size: 26px;
+      font-weight: 600;
+    }
+
+    .tile .detail
+    {
+      overflow: hidden;
+      color: var(--ink-2);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .segmented
+    {
+      display: inline-flex;
+      margin-bottom: 20px;
+      padding: 2px;
+      border-radius: 9px;
+      background: var(--segment);
+    }
+
+    .segmented button
+    {
+      padding: 6px 16px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .segmented button[aria-pressed="true"]
+    {
+      background: var(--segment-on);
+      box-shadow: var(--segment-shadow);
+    }
+
+    section.group
+    {
+      margin-bottom: 20px;
+    }
+
+    h2
+    {
+      margin: 0 0 8px 4px;
+      font-size: 17px;
+      font-weight: 600;
+    }
+
+    ul.devices
+    {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      border-radius: 14px;
+      background: var(--card);
+      list-style: none;
+    }
+
+    li.device
+    {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas: "identity battery" "readings readings";
+      gap: 6px 12px;
+      padding: 12px 14px;
+      border-top: 1px solid var(--hairline);
+    }
+
+    li.device:first-child
+    {
+      border-top: 0;
+    }
+
+    .identity
+    {
+      grid-area: identity;
+      min-width: 0;
+    }
+
+    .name,
+    .sub
+    {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .name
+    {
+      font-weight: 600;
+    }
+
+    .sub,
+    .problem
+    {
+      color: var(--ink-2);
+      font-size: 13px;
+    }
+
+    .problem
+    {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 2px;
+    }
+
+    .battery
+    {
+      display: flex;
+      grid-area: battery;
+      align-items: center;
+      align-self: start;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .meter
+    {
+      position: relative;
+      width: 64px;
+      height: 6px;
+      overflow: hidden;
+      border-radius: 3px;
+      background: color-mix(in srgb, var(--tone) 22%, transparent);
+    }
+
+    .meter .fill
+    {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      min-width: 6px;
+      border-radius: 3px;
+      background: var(--tone);
+    }
+
+    .pct
+    {
+      min-width: 38px;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .muted
+    {
+      color: var(--ink-3);
+    }
+
+    .readings
+    {
+      display: flex;
+      grid-area: readings;
+      flex-wrap: wrap;
+      gap: 4px 14px;
+    }
+
+    .reading
+    {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .reading.quiet
+    {
+      color: var(--ink-2);
+    }
+
+    .reading.strong
+    {
+      font-weight: 600;
+    }
+
+    li.device.stale .readings,
+    li.device.stale .battery
+    {
+      opacity: 0.5;
+    }
+
+    .icon
+    {
+      display: inline-flex;
+      flex: none;
+      width: 16px;
+      height: 16px;
+      color: var(--tone);
+    }
+
+    .icon svg
+    {
+      width: 16px;
+      height: 16px;
+    }
+
+    .tone-normal
+    {
+      --tone: var(--accent);
+    }
+
+    .tone-warning
+    {
+      --tone: var(--warning);
+    }
+
+    .tone-serious
+    {
+      --tone: var(--serious);
+    }
+
+    .tone-critical
+    {
+      --tone: var(--critical);
+    }
+
+    .tone-muted
+    {
+      --tone: var(--ink-2);
+    }
+
+    .message
+    {
+      padding: 48px 16px;
+      color: var(--ink-2);
+      text-align: center;
+    }
+
+    .history-note
+    {
+      margin: -8px 0 16px 4px;
+      color: var(--ink-2);
+      font-size: 13px;
+    }
+
+    .sensor
+    {
+      margin-bottom: 12px;
+      padding: 12px 14px 6px;
+      border-radius: 14px;
+      background: var(--card);
+    }
+
+    .sensor-head
+    {
+      min-width: 0;
+      padding-bottom: 10px;
+    }
+
+    .chart-block
+    {
+      padding: 10px 0 6px;
+      border-top: 1px solid var(--hairline);
+    }
+
+    .chart-head
+    {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .chart-value
+    {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .chart-range
+    {
+      color: var(--ink-2);
+      font-size: 12px;
+    }
+
+    figure.chart
+    {
+      position: relative;
+      margin: 6px 0 0;
+      border-radius: 8px;
+      outline: none;
+    }
+
+    figure.chart:focus-visible
+    {
+      box-shadow: 0 0 0 2px var(--accent);
+    }
+
+    figure.chart svg
+    {
+      display: block;
+      overflow: hidden;
+      touch-action: pan-y;
+    }
+
+    .chart .grid
+    {
+      stroke: var(--hairline);
+      stroke-width: 1;
+      shape-rendering: crispEdges;
+    }
+
+    .chart .axis-label
+    {
+      fill: var(--ink-2);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .chart .line
+    {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .chart .dot
+    {
+      fill: var(--accent);
+      stroke: var(--card);
+      stroke-width: 2;
+    }
+
+    .chart .crosshair
+    {
+      stroke: var(--ink-3);
+      stroke-width: 1;
+      shape-rendering: crispEdges;
+    }
+
+    .chart .hit
+    {
+      fill: transparent;
+      cursor: crosshair;
+    }
+
+    .chart-tip
+    {
+      position: absolute;
+      top: 0;
+      left: 0;
+      padding: 4px 8px;
+      border: 1px solid var(--hairline);
+      border-radius: 8px;
+      background: var(--card);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+      font-size: 12px;
+      line-height: 1.3;
+      white-space: nowrap;
+      pointer-events: none;
+    }
+
+    .chart-tip strong
+    {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .chart-tip span
+    {
+      color: var(--ink-2);
+    }
+
+    details.table-view
+    {
+      margin-top: 2px;
+      font-size: 13px;
+    }
+
+    details.table-view summary
+    {
+      padding: 4px 0;
+      color: var(--accent);
+      cursor: pointer;
+    }
+
+    details.table-view table
+    {
+      width: 100%;
+      margin: 2px 0 6px;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+
+    details.table-view th,
+    details.table-view td
+    {
+      padding: 4px 0 4px 8px;
+      border-top: 1px solid var(--hairline);
+      font-weight: 400;
+      text-align: right;
+    }
+
+    details.table-view th:first-child,
+    details.table-view td:first-child
+    {
+      padding-left: 0;
+      text-align: left;
+    }
+
+    details.table-view thead th
+    {
+      border-top: 0;
+      color: var(--ink-2);
+      font-weight: 500;
+    }
+
+    @media (min-width: 700px)
+    {
+      .tiles
+      {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      li.device
+      {
+        grid-template-columns: minmax(0, 1fr) minmax(200px, 300px) 160px;
+        grid-template-areas: "identity readings battery";
+        align-items: center;
+      }
+
+      .battery
+      {
+        align-self: center;
+        margin: 0;
+      }
+
+      .meter
+      {
+        flex: 1;
+        width: auto;
+      }
+
+      .sensor-charts
+      {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        column-gap: 24px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Home Sensors</h1>
+      <div class="updated">
+        <span id="updated"></span>
+        <button class="refresh" id="refresh" type="button" aria-label="Refresh readings">
+          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10a6 6 0 1 1-1.76-4.24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15 2.5v3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+    <div class="banner" id="banner" role="status" hidden>
+      <span class="icon tone-serious" aria-hidden="true"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><rect x="7.25" y="3.8" width="1.5" height="5.2" rx="0.75" fill="#fff"/><circle cx="8" cy="11.4" r="0.9" fill="#fff"/></svg></span>
+      <span>Can't reach Home Sensors. Showing the last readings received.</span>
+    </div>
+    <div id="content"><p class="message">Loading Home data…</p></div>
+  </main>
+  <script>
+    "use strict";
+
+    // Status icons. Each pairs a shape with the status color, so color never carries meaning alone.
+    const ICONS = {
+      warning: '<svg viewBox="0 0 16 16"><path d="M7.13 1.5a1 1 0 0 1 1.74 0l6.5 11.5a1 1 0 0 1-.87 1.5h-13a1 1 0 0 1-.87-1.5z" fill="currentColor"/><rect x="7.25" y="5" width="1.5" height="5" rx="0.75" fill="#0b0b0b"/><circle cx="8" cy="12" r="0.9" fill="#0b0b0b"/></svg>',
+      serious: '<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><rect x="7.25" y="3.8" width="1.5" height="5.2" rx="0.75" fill="#fff"/><circle cx="8" cy="11.4" r="0.9" fill="#fff"/></svg>',
+      critical: '<svg viewBox="0 0 16 16"><path d="M5.1 1h5.8L15 5.1v5.8L10.9 15H5.1L1 10.9V5.1z" fill="currentColor"/><rect x="7.25" y="3.8" width="1.5" height="5.2" rx="0.75" fill="#fff"/><circle cx="8" cy="11.4" r="0.9" fill="#fff"/></svg>',
+      bolt: '<svg viewBox="0 0 16 16"><path d="M9.2 1 3.5 9h3.8l-.9 6 5.9-8.2H8.4z" fill="currentColor"/></svg>'
+    };
+
+    const MESSAGES = {
+      loading: "Loading Home data…",
+      notAuthorized: "Home Sensors doesn't have access to Home data on the Mac that runs it.",
+      noHomes: "No homes found. Set up a home in the Home app first."
+    };
+
+    const POLL_INTERVAL = 15000;
+    // History changes slowly: the app averages it into 10-minute buckets.
+    const HISTORY_INTERVAL = 5 * 60 * 1000;
+    const HISTORY_RETRY = 30 * 1000;
+    // Samples further apart than this mean the app wasn't running or the sensor wasn't responding.
+    const GAP_SECONDS = 45 * 60;
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const VIEWS = [["room", "Room"], ["battery", "Battery level"], ["history", "History"]];
+    const content = document.getElementById("content");
+    const updated = document.getElementById("updated");
+    const banner = document.getElementById("banner");
+    const refreshButton = document.getElementById("refresh");
+
+    let latest = null;
+    let failed = false;
+    let loading = false;
+    let view = readView();
+    const viewControl = buildViewControl();
+
+    let historyData = null;
+    let historyFailed = false;
+    let historyLoading = false;
+    let historyDueAt = 0;
+    let historyNode = null;
+    let historyKey = "";
+    let liveValues = [];
+    let liveCards = [];
+
+    function readView()
+    {
+      try
+      {
+        const saved = localStorage.getItem("grouping");
+        return saved === "battery" || saved === "history" ? saved : "room";
+      }
+      catch (error)
+      {
+        return "room";
+      }
+    }
+
+    function writeView(value)
+    {
+      try
+      {
+        localStorage.setItem("grouping", value);
+      }
+      catch (error)
+      {
+        // Private browsing can block storage; the choice just won't be remembered.
+      }
+    }
+
+    function element(tag, className, text)
+    {
+      const node = document.createElement(tag);
+      if (className)
+      {
+        node.className = className;
+      }
+      if (text !== undefined && text !== null)
+      {
+        node.textContent = text;
+      }
+      return node;
+    }
+
+    function icon(name, tone)
+    {
+      const span = element("span", "icon tone-" + tone);
+      span.setAttribute("aria-hidden", "true");
+      span.innerHTML = ICONS[name] || "";
+      return span;
+    }
+
+    function compareText(a, b)
+    {
+      return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+    }
+
+    function formatTime(iso)
+    {
+      return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    }
+
+    function render()
+    {
+      banner.hidden = !failed;
+      content.classList.toggle("stale", failed && latest !== null);
+      refreshButton.classList.toggle("spinning", Boolean(latest && latest.isRefreshing));
+      if (latest === null)
+      {
+        if (failed)
+        {
+          show([element("p", "message", "Can't reach Home Sensors. Check that the app is running on the Mac.")]);
+        }
+        return;
+      }
+      if (latest.isRefreshing)
+      {
+        updated.textContent = "Updating…";
+      }
+      else if (latest.lastRefresh)
+      {
+        updated.textContent = "Updated " + formatTime(latest.lastRefresh);
+      }
+      if (latest.phase !== "ready")
+      {
+        show([element("p", "message", MESSAGES[latest.phase] || MESSAGES.loading)]);
+        return;
+      }
+      if (latest.devices.length === 0)
+      {
+        show([element("p", "message", "No accessory reports a battery level or a sensor reading.")]);
+        return;
+      }
+      updateViewControl();
+      const body = view === "history" ? [historyView(latest.devices)] : renderGroups(latest.devices);
+      show([renderTiles(latest.tiles), viewControl].concat(body));
+      if (view === "history")
+      {
+        drawCharts();
+      }
+    }
+
+    // Swaps in new nodes but leaves ones already in place, so a chart keeps its focus and hover state.
+    function show(nodes)
+    {
+      for (let index = 0; index < nodes.length; index += 1)
+      {
+        const node = nodes[index];
+        const existing = content.childNodes[index] || null;
+        if (existing === node)
+        {
+          continue;
+        }
+        if (existing && node.parentNode !== content)
+        {
+          content.replaceChild(node, existing);
+        }
+        else
+        {
+          content.insertBefore(node, existing);
+        }
+      }
+      while (content.childNodes.length > nodes.length)
+      {
+        content.lastChild.remove();
+      }
+    }
+
+    function renderTiles(tiles)
+    {
+      const grid = element("div", "tiles");
+      for (const tile of tiles)
+      {
+        const card = element("div", "tile");
+        const value = element("div", "value");
+        if (tile.status)
+        {
+          value.append(icon(tile.status, tile.status));
+        }
+        value.append(element("span", null, tile.value));
+        card.append(element("div", "label", tile.label), value, element("div", "detail", tile.detail));
+        grid.append(card);
+      }
+      return grid;
+    }
+
+    // Built once and kept, so a focused button stays focused when the page refreshes.
+    function buildViewControl()
+    {
+      const control = element("div", "segmented");
+      control.setAttribute("role", "group");
+      control.setAttribute("aria-label", "View");
+      for (const [value, label] of VIEWS)
+      {
+        const button = element("button", null, label);
+        button.type = "button";
+        button.dataset.view = value;
+        button.addEventListener("click", function ()
+        {
+          selectView(value);
+        });
+        control.append(button);
+      }
+      return control;
+    }
+
+    function updateViewControl()
+    {
+      for (const button of viewControl.children)
+      {
+        button.setAttribute("aria-pressed", String(button.dataset.view === view));
+      }
+    }
+
+    function selectView(value)
+    {
+      view = value;
+      writeView(value);
+      loadHistoryIfDue();
+      render();
+    }
+
+    function byName(a, b)
+    {
+      return compareText(a.name, b.name);
+    }
+
+    function renderGroups(devices)
+    {
+      if (view === "battery")
+      {
+        const sorted = devices.slice().sort(function (a, b)
+        {
+          return a.batterySortKey - b.batterySortKey || byName(a, b);
+        });
+        return [renderGroup("All devices, lowest battery first", sorted, true)];
+      }
+      const sections = new Map();
+      for (const device of devices)
+      {
+        if (!sections.has(device.section))
+        {
+          sections.set(device.section, []);
+        }
+        sections.get(device.section).push(device);
+      }
+      const titles = Array.from(sections.keys()).sort(compareText);
+      const groups = [];
+      for (const title of titles)
+      {
+        groups.push(renderGroup(title, sections.get(title).sort(byName), false));
+      }
+      return groups;
+    }
+
+    function renderGroup(title, devices, showRoom)
+    {
+      const section = element("section", "group");
+      const list = element("ul", "devices");
+      for (const device of devices)
+      {
+        list.append(renderDevice(device, showRoom));
+      }
+      section.append(element("h2", null, title), list);
+      return section;
+    }
+
+    function renderDevice(device, showRoom)
+    {
+      const item = element("li", device.reachable ? "device" : "device stale");
+      const identity = element("div", "identity");
+      identity.append(element("div", "name", device.name));
+      const subtitle = [showRoom ? device.room : null, device.model].filter(Boolean).join(" · ");
+      if (subtitle)
+      {
+        identity.append(element("div", "sub", subtitle));
+      }
+      if (!device.reachable)
+      {
+        const problem = element("div", "problem");
+        problem.append(icon("serious", "serious"), element("span", null, "Not responding"));
+        identity.append(problem);
+      }
+      item.append(identity, renderReadings(device.readings), renderBattery(device.battery));
+      return item;
+    }
+
+    function renderReadings(readings)
+    {
+      const container = element("div", "readings");
+      if (readings.length === 0)
+      {
+        container.append(element("span", "muted", "No sensor readings"));
+        return container;
+      }
+      for (const reading of readings)
+      {
+        let className = "reading";
+        if (reading.quiet)
+        {
+          className += " quiet";
+        }
+        if (reading.alert || reading.active)
+        {
+          className += " strong";
+        }
+        const chip = element("span", className);
+        chip.title = reading.name;
+        chip.setAttribute("aria-label", reading.name + ": " + reading.text);
+        if (reading.alert)
+        {
+          chip.append(icon(reading.alert, reading.alert));
+        }
+        chip.append(element("span", null, reading.text));
+        container.append(chip);
+      }
+      return container;
+    }
+
+    function renderBattery(battery)
+    {
+      const container = element("div", "battery");
+      container.setAttribute("role", "img");
+      if (!battery)
+      {
+        container.setAttribute("aria-label", "No battery");
+        container.append(element("span", "muted", "No battery"));
+        return container;
+      }
+      container.setAttribute("aria-label", battery.description);
+      if (typeof battery.level === "number")
+      {
+        const meter = element("div", "meter tone-" + battery.severity);
+        if (battery.level > 0)
+        {
+          const fill = element("div", "fill");
+          fill.style.width = Math.min(100, battery.level) + "%";
+          meter.append(fill);
+        }
+        container.append(meter);
+      }
+      if (battery.severity !== "normal")
+      {
+        container.append(icon(battery.severity, battery.severity));
+      }
+      else if (battery.charging)
+      {
+        container.append(icon("bolt", "muted"));
+      }
+      else
+      {
+        container.append(element("span", "icon"));
+      }
+      container.append(element("span", "pct", battery.text));
+      return container;
+    }
+
+    // History view: one card per sensor, one 7-day line chart per measurement.
+
+    function historyView(devices)
+    {
+      const key = historySignature(devices);
+      if (historyNode === null || key !== historyKey)
+      {
+        liveValues = [];
+        liveCards = [];
+        historyNode = buildHistory(devices);
+        historyKey = key;
+      }
+      else
+      {
+        updateLive(devices);
+      }
+      return historyNode;
+    }
+
+    // Charts are rebuilt only when new history arrives or devices are renamed or moved.
+    function historySignature(devices)
+    {
+      const parts = [historyData ? String(historyData.now) : historyFailed ? "failed" : "loading"];
+      for (const device of devices)
+      {
+        parts.push([device.id, device.name, device.section, device.model].join("\u001f"));
+      }
+      return parts.join("\u001e");
+    }
+
+    function buildHistory(devices)
+    {
+      const container = element("div", "history");
+      if (historyData === null)
+      {
+        container.append(element("p", "message", historyFailed ? "Can't load the history from Home Sensors." : "Loading history…"));
+        return container;
+      }
+      const seriesByDevice = new Map();
+      for (const series of historyData.series)
+      {
+        if (!seriesByDevice.has(series.device))
+        {
+          seriesByDevice.set(series.device, []);
+        }
+        seriesByDevice.get(series.device).push(series);
+      }
+      const charted = devices.filter(function (device)
+      {
+        return seriesByDevice.has(device.id);
+      });
+      if (charted.length === 0 || typeof historyData.recordingSince !== "number")
+      {
+        container.append(element("p", "message", "Nothing recorded yet. Charts appear here as sensors report temperature, humidity, or light."));
+        return container;
+      }
+      const since = Math.max(historyData.start, historyData.recordingSince);
+      // At least an hour wide, so the first readings don't fill the whole chart.
+      const domain = [Math.min(since, historyData.now - 3600), historyData.now];
+      const partial = since > historyData.start + historyData.bucketSeconds;
+      const note = partial ? "Recording since " + formatMoment(since) + ". Charts grow until they cover 7 days." : "Last 7 days";
+      const period = partial ? "since " + formatMoment(since) : "over the last 7 days";
+      container.append(element("p", "history-note", note));
+      const sections = new Map();
+      for (const device of charted)
+      {
+        if (!sections.has(device.section))
+        {
+          sections.set(device.section, []);
+        }
+        sections.get(device.section).push(device);
+      }
+      for (const title of Array.from(sections.keys()).sort(compareText))
+      {
+        const section = element("section", "group");
+        section.append(element("h2", null, title));
+        for (const device of sections.get(title).sort(byName))
+        {
+          section.append(renderSensor(device, seriesByDevice.get(device.id), domain, period));
+        }
+        container.append(section);
+      }
+      return container;
+    }
+
+    function renderSensor(device, seriesList, domain, period)
+    {
+      const card = element("article", "sensor");
+      const head = element("div", "sensor-head");
+      head.append(element("div", "name", device.name));
+      if (device.model)
+      {
+        head.append(element("div", "sub", device.model));
+      }
+      const problem = element("div", "problem");
+      problem.append(icon("serious", "serious"), element("span", null, "Not responding"));
+      problem.hidden = device.reachable;
+      head.append(problem);
+      liveCards.push({ id: device.id, problem: problem });
+      const charts = element("div", "sensor-charts");
+      for (const series of seriesList)
+      {
+        charts.append(renderChartBlock(device, series, domain, period));
+      }
+      card.append(head, charts);
+      return card;
+    }
+
+    function renderChartBlock(device, series, domain, period)
+    {
+      const block = element("div", "chart-block");
+      const head = element("div", "chart-head");
+      const current = element("span", "chart-value", liveText(device, series));
+      head.append(element("span", "chart-title", series.name), current);
+      liveValues.push({ id: device.id, series: series, node: current });
+      let low = Infinity;
+      let high = -Infinity;
+      for (const point of series.points)
+      {
+        low = Math.min(low, point[1]);
+        high = Math.max(high, point[1]);
+      }
+      const figure = element("figure", "chart");
+      figure.tabIndex = 0;
+      figure.setAttribute("role", "group");
+      figure.setAttribute("aria-label", device.name + " " + series.name.toLowerCase() + " " + period + ": low " + withUnit(low, series) + ", high " + withUnit(high, series) + ". Use the arrow keys to read values.");
+      const tip = element("div", "chart-tip");
+      tip.hidden = true;
+      tip.setAttribute("aria-live", "polite");
+      const tipValue = element("strong");
+      const tipTime = element("span");
+      tip.append(tipValue, tipTime);
+      figure.append(tip);
+      figure.chart = { series: series, domain: domain, active: -1, width: 0, tip: tip, tipValue: tipValue, tipTime: tipTime };
+      figure.addEventListener("focus", function ()
+      {
+        const chart = figure.chart;
+        showPoint(figure, chart.active >= 0 ? chart.active : chart.series.points.length - 1);
+      });
+      figure.addEventListener("blur", function ()
+      {
+        hidePoint(figure);
+      });
+      figure.addEventListener("keydown", function (event)
+      {
+        stepPoint(figure, event);
+      });
+      block.append(head, element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)), figure, renderTable(series));
+      return block;
+    }
+
+    // The value the Room view shows, so both views agree.
+    function liveText(device, series)
+    {
+      for (const reading of device.readings)
+      {
+        if (reading.name === series.name)
+        {
+          return reading.text;
+        }
+      }
+      return withUnit(series.points[series.points.length - 1][1], series);
+    }
+
+    function updateLive(devices)
+    {
+      const byId = new Map();
+      for (const device of devices)
+      {
+        byId.set(device.id, device);
+      }
+      for (const live of liveValues)
+      {
+        const device = byId.get(live.id);
+        if (device)
+        {
+          const text = liveText(device, live.series);
+          if (live.node.textContent !== text)
+          {
+            live.node.textContent = text;
+          }
+        }
+      }
+      for (const card of liveCards)
+      {
+        const device = byId.get(card.id);
+        if (device)
+        {
+          card.problem.hidden = device.reachable;
+        }
+      }
+    }
+
+    // The table twin of a chart: one row per day, newest first.
+    function renderTable(series)
+    {
+      const details = element("details", "table-view");
+      details.append(element("summary", null, "Daily low and high"));
+      const days = [];
+      let current = null;
+      for (const point of series.points)
+      {
+        const date = new Date(point[0] * 1000);
+        const key = date.toDateString();
+        if (current === null || current.key !== key)
+        {
+          current = { key: key, date: date, low: point[1], high: point[1], sum: 0, count: 0 };
+          days.push(current);
+        }
+        current.low = Math.min(current.low, point[1]);
+        current.high = Math.max(current.high, point[1]);
+        current.sum += point[1];
+        current.count += 1;
+      }
+      const headRow = element("tr");
+      for (const label of ["Day", "Low", "High", "Average"])
+      {
+        const cell = element("th", null, label === "Day" ? label : label + " (" + series.unit + ")");
+        cell.scope = "col";
+        headRow.append(cell);
+      }
+      const head = element("thead");
+      head.append(headRow);
+      const body = element("tbody");
+      for (let index = days.length - 1; index >= 0; index -= 1)
+      {
+        const day = days[index];
+        const row = element("tr");
+        const name = element("th", null, day.date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }));
+        name.scope = "row";
+        row.append(
+          name,
+          element("td", null, formatNumber(day.low, series.decimals)),
+          element("td", null, formatNumber(day.high, series.decimals)),
+          element("td", null, formatNumber(day.sum / day.count, series.decimals))
+        );
+        body.append(row);
+      }
+      const table = element("table");
+      table.append(head, body);
+      details.append(table);
+      return details;
+    }
+
+    function drawCharts()
+    {
+      if (historyNode === null)
+      {
+        return;
+      }
+      for (const figure of historyNode.querySelectorAll("figure.chart"))
+      {
+        drawChart(figure);
+      }
+    }
+
+    // Draws at the figure's current width; redrawn only when that width changes.
+    function drawChart(figure)
+    {
+      const chart = figure.chart;
+      const width = Math.round(figure.clientWidth);
+      if (width === 0 || chart.width === width)
+      {
+        return;
+      }
+      chart.width = width;
+      const series = chart.series;
+      const points = series.points;
+      let low = Infinity;
+      let high = -Infinity;
+      for (const point of points)
+      {
+        low = Math.min(low, point[1]);
+        high = Math.max(high, point[1]);
+      }
+      const span = Math.max(high - low, series.minimumSpan);
+      const middle = (low + high) / 2;
+      low = middle - span / 2;
+      high = middle + span / 2;
+      if (series.nonNegative && low < 0)
+      {
+        high -= low;
+        low = 0;
+      }
+      const scale = niceScale(low, high);
+      const decimals = stepDecimals(scale.step);
+      const labels = scale.ticks.map(function (value)
+      {
+        return formatNumber(value, decimals);
+      });
+      let longest = 0;
+      for (const label of labels)
+      {
+        longest = Math.max(longest, label.length);
+      }
+      const geometry = {
+        width: width,
+        left: Math.ceil(longest * 6.5 + 10),
+        right: width - 8,
+        top: 8,
+        bottom: 116,
+        d0: chart.domain[0],
+        d1: chart.domain[1],
+        min: scale.min,
+        max: scale.max
+      };
+      chart.geometry = geometry;
+      const height = 140;
+      const root = svgElement("svg", { width: width, height: height, viewBox: "0 0 " + width + " " + height, "aria-hidden": "true" });
+      for (let index = 0; index < scale.ticks.length; index += 1)
+      {
+        const y = Math.round(chartY(geometry, scale.ticks[index])) + 0.5;
+        root.append(svgElement("line", { x1: geometry.left, x2: geometry.right, y1: y, y2: y }, "grid"));
+        root.append(svgText(labels[index], geometry.left - 6, y, "end", "middle"));
+      }
+      const axis = timeAxis(geometry.d0, geometry.d1, geometry.right - geometry.left);
+      for (const t of axis.lines)
+      {
+        const x = Math.round(chartX(geometry, t)) + 0.5;
+        root.append(svgElement("line", { x1: x, x2: x, y1: geometry.top, y2: geometry.bottom }, "grid"));
+      }
+      for (const label of axis.labels)
+      {
+        const x = chartX(geometry, label.t);
+        const half = label.text.length * 3.3;
+        if (x - half >= 0 && x + half <= width)
+        {
+          root.append(svgText(label.text, x, 132, "middle", "auto"));
+        }
+      }
+      root.append(svgElement("path", { d: linePath(geometry, points) }, "line"));
+      const last = points[points.length - 1];
+      root.append(svgElement("circle", { cx: chartX(geometry, last[0]), cy: chartY(geometry, last[1]), r: 4 }, "dot"));
+      chart.crosshair = svgElement("line", { y1: geometry.top, y2: geometry.bottom, visibility: "hidden" }, "crosshair");
+      chart.marker = svgElement("circle", { r: 4, visibility: "hidden" }, "dot");
+      const hit = svgElement("rect", { x: geometry.left, y: 0, width: geometry.right - geometry.left, height: geometry.bottom + 6 }, "hit");
+      hit.addEventListener("pointerdown", function (event)
+      {
+        pointAt(figure, event);
+      });
+      hit.addEventListener("pointermove", function (event)
+      {
+        pointAt(figure, event);
+      });
+      hit.addEventListener("pointerleave", function ()
+      {
+        hidePoint(figure);
+      });
+      hit.addEventListener("pointercancel", function ()
+      {
+        hidePoint(figure);
+      });
+      root.append(chart.crosshair, chart.marker, hit);
+      if (chart.svg)
+      {
+        chart.svg.remove();
+      }
+      chart.svg = root;
+      figure.insertBefore(root, figure.firstChild);
+      if (!chart.tip.hidden && chart.active >= 0)
+      {
+        showPoint(figure, chart.active);
+      }
+    }
+
+    function svgElement(tag, attributes, className)
+    {
+      const node = document.createElementNS(SVG_NS, tag);
+      for (const name of Object.keys(attributes))
+      {
+        node.setAttribute(name, String(attributes[name]));
+      }
+      if (className)
+      {
+        node.setAttribute("class", className);
+      }
+      return node;
+    }
+
+    function svgText(text, x, y, anchor, baseline)
+    {
+      const node = svgElement("text", { x: x, y: y, "text-anchor": anchor, "dominant-baseline": baseline }, "axis-label");
+      node.textContent = text;
+      return node;
+    }
+
+    function chartX(geometry, t)
+    {
+      return geometry.left + (t - geometry.d0) / (geometry.d1 - geometry.d0) * (geometry.right - geometry.left);
+    }
+
+    function chartY(geometry, value)
+    {
+      return geometry.bottom - (value - geometry.min) / (geometry.max - geometry.min) * (geometry.bottom - geometry.top);
+    }
+
+    // Breaks the line where readings are missing instead of drawing across the gap.
+    function linePath(geometry, points)
+    {
+      let path = "";
+      for (let index = 0; index < points.length; index += 1)
+      {
+        const point = points[index];
+        const previous = points[index - 1];
+        const next = points[index + 1];
+        const startsSegment = !previous || point[0] - previous[0] > GAP_SECONDS;
+        path += (startsSegment ? "M" : "L") + chartX(geometry, point[0]).toFixed(1) + " " + chartY(geometry, point[1]).toFixed(1);
+        // A reading with no neighbors gets a tiny segment so its round cap shows as a dot.
+        if (startsSegment && (!next || next[0] - point[0] > GAP_SECONDS))
+        {
+          path += "h0.01";
+        }
+      }
+      return path;
+    }
+
+    // Round tick values: steps of 1, 2, or 5 times a power of ten.
+    function niceScale(low, high)
+    {
+      const raw = (high - low) / 4;
+      const power = Math.pow(10, Math.floor(Math.log10(raw)));
+      const fraction = raw / power;
+      let step = 10 * power;
+      if (fraction <= 1)
+      {
+        step = power;
+      }
+      else if (fraction <= 2)
+      {
+        step = 2 * power;
+      }
+      else if (fraction <= 5)
+      {
+        step = 5 * power;
+      }
+      const min = Math.floor(low / step + 1e-9) * step;
+      const max = Math.ceil(high / step - 1e-9) * step;
+      const ticks = [];
+      for (let value = min; value <= max + step / 2; value += step)
+      {
+        ticks.push(Number(value.toFixed(6)));
+      }
+      return { min: min, max: max, step: step, ticks: ticks };
+    }
+
+    function stepDecimals(step)
+    {
+      return Math.max(0, Math.ceil(-Math.log10(step) - 1e-9));
+    }
+
+    // Day columns for spans over 36 hours, otherwise hour ticks spaced to fit their labels.
+    function timeAxis(d0, d1, plotWidth)
+    {
+      const lines = [];
+      const labels = [];
+      const pixelsPerSecond = plotWidth / (d1 - d0);
+      if (d1 - d0 > 36 * 3600)
+      {
+        const day = new Date(d0 * 1000);
+        day.setHours(0, 0, 0, 0);
+        while (day.getTime() / 1000 < d1)
+        {
+          const start = day.getTime() / 1000;
+          const next = new Date(day.getTime());
+          next.setDate(next.getDate() + 1);
+          const end = next.getTime() / 1000;
+          if (start > d0)
+          {
+            lines.push(start);
+          }
+          const visibleStart = Math.max(start, d0);
+          const visibleEnd = Math.min(end, d1);
+          if ((visibleEnd - visibleStart) * pixelsPerSecond >= 30)
+          {
+            labels.push({ t: (visibleStart + visibleEnd) / 2, text: day.toLocaleDateString([], { weekday: "short" }) });
+          }
+          day.setDate(day.getDate() + 1);
+        }
+        return { lines: lines, labels: labels };
+      }
+      let step = 12;
+      for (const candidate of [1, 2, 3, 6, 12])
+      {
+        if (candidate * 3600 * pixelsPerSecond >= 48)
+        {
+          step = candidate;
+          break;
+        }
+      }
+      const tick = new Date(d0 * 1000);
+      tick.setMinutes(0, 0, 0);
+      while (tick.getTime() / 1000 <= d0 || tick.getHours() % step !== 0)
+      {
+        tick.setHours(tick.getHours() + 1);
+      }
+      while (tick.getTime() / 1000 < d1)
+      {
+        const t = tick.getTime() / 1000;
+        lines.push(t);
+        const text = tick.getHours() === 0 ? tick.toLocaleDateString([], { weekday: "short" }) : tick.toLocaleTimeString([], { hour: "numeric" });
+        labels.push({ t: t, text: text });
+        tick.setHours(tick.getHours() + step);
+      }
+      return { lines: lines, labels: labels };
+    }
+
+    function nearestIndex(points, t)
+    {
+      let low = 0;
+      let high = points.length - 1;
+      while (high - low > 1)
+      {
+        const middle = (low + high) >> 1;
+        if (points[middle][0] < t)
+        {
+          low = middle;
+        }
+        else
+        {
+          high = middle;
+        }
+      }
+      return Math.abs(points[low][0] - t) <= Math.abs(points[high][0] - t) ? low : high;
+    }
+
+    // The crosshair snaps to the reading nearest the pointer.
+    function pointAt(figure, event)
+    {
+      const chart = figure.chart;
+      const geometry = chart.geometry;
+      const bounds = chart.svg.getBoundingClientRect();
+      const x = event.clientX - bounds.left;
+      const t = geometry.d0 + (x - geometry.left) / (geometry.right - geometry.left) * (geometry.d1 - geometry.d0);
+      showPoint(figure, nearestIndex(chart.series.points, t));
+    }
+
+    function showPoint(figure, index)
+    {
+      const chart = figure.chart;
+      const geometry = chart.geometry;
+      if (!geometry)
+      {
+        return;
+      }
+      const point = chart.series.points[index];
+      const x = chartX(geometry, point[0]);
+      const y = chartY(geometry, point[1]);
+      const lineX = Math.round(x) + 0.5;
+      chart.active = index;
+      chart.crosshair.setAttribute("x1", lineX);
+      chart.crosshair.setAttribute("x2", lineX);
+      chart.crosshair.setAttribute("visibility", "visible");
+      chart.marker.setAttribute("cx", x);
+      chart.marker.setAttribute("cy", y);
+      chart.marker.setAttribute("visibility", "visible");
+      chart.tipValue.textContent = withUnit(point[1], chart.series);
+      chart.tipTime.textContent = formatMoment(point[0]);
+      chart.tip.hidden = false;
+      const tipWidth = chart.tip.offsetWidth;
+      let left = x + 10;
+      if (left + tipWidth > geometry.width)
+      {
+        left = x - 10 - tipWidth;
+      }
+      chart.tip.style.left = Math.max(0, left) + "px";
+      chart.tip.style.top = geometry.top + "px";
+    }
+
+    function hidePoint(figure)
+    {
+      const chart = figure.chart;
+      if (chart.crosshair)
+      {
+        chart.crosshair.setAttribute("visibility", "hidden");
+        chart.marker.setAttribute("visibility", "hidden");
+      }
+      chart.tip.hidden = true;
+    }
+
+    // Arrow keys step one reading; Page Up and Page Down jump a day.
+    function stepPoint(figure, event)
+    {
+      const chart = figure.chart;
+      const points = chart.series.points;
+      const last = points.length - 1;
+      let index = chart.active >= 0 ? chart.active : last;
+      switch (event.key)
+      {
+        case "ArrowLeft":
+          index = Math.max(0, index - 1);
+          break;
+        case "ArrowRight":
+          index = Math.min(last, index + 1);
+          break;
+        case "PageUp":
+          index = nearestIndex(points, points[index][0] - 86400);
+          break;
+        case "PageDown":
+          index = nearestIndex(points, points[index][0] + 86400);
+          break;
+        case "Home":
+          index = 0;
+          break;
+        case "End":
+          index = last;
+          break;
+        case "Escape":
+          hidePoint(figure);
+          return;
+        default:
+          return;
+      }
+      event.preventDefault();
+      showPoint(figure, index);
+    }
+
+    function formatNumber(value, decimals)
+    {
+      return value.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    }
+
+    function withUnit(value, series)
+    {
+      const number = formatNumber(value, series.decimals);
+      return /^[°%]/.test(series.unit) ? number + series.unit : number + " " + series.unit;
+    }
+
+    function formatMoment(seconds)
+    {
+      return new Date(seconds * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+    }
+
+    function loadHistoryIfDue()
+    {
+      if (view === "history" && Date.now() >= historyDueAt)
+      {
+        loadHistory();
+      }
+    }
+
+    async function loadHistory()
+    {
+      if (historyLoading)
+      {
+        return;
+      }
+      historyLoading = true;
+      try
+      {
+        const response = await fetch("/api/history", { cache: "no-store" });
+        if (!response.ok)
+        {
+          throw new Error("HTTP " + response.status);
+        }
+        historyData = await response.json();
+        historyFailed = false;
+        historyDueAt = Date.now() + HISTORY_INTERVAL;
+      }
+      catch (error)
+      {
+        historyFailed = true;
+        historyDueAt = Date.now() + HISTORY_RETRY;
+      }
+      finally
+      {
+        historyLoading = false;
+      }
+      render();
+    }
+
+    async function load()
+    {
+      if (loading)
+      {
+        return;
+      }
+      loading = true;
+      const wasRefreshing = Boolean(latest && latest.isRefreshing);
+      try
+      {
+        const response = await fetch("/api/devices", { cache: "no-store" });
+        if (!response.ok)
+        {
+          throw new Error("HTTP " + response.status);
+        }
+        latest = await response.json();
+        failed = false;
+        if (wasRefreshing && !latest.isRefreshing)
+        {
+          // A finished refresh has just recorded new readings.
+          historyDueAt = 0;
+        }
+      }
+      catch (error)
+      {
+        failed = true;
+      }
+      finally
+      {
+        loading = false;
+      }
+      render();
+      loadHistoryIfDue();
+      if (latest && latest.isRefreshing)
+      {
+        setTimeout(load, 2000);
+      }
+    }
+
+    async function requestRefresh()
+    {
+      refreshButton.disabled = true;
+      try
+      {
+        await fetch("/api/refresh", { method: "POST", cache: "no-store" });
+      }
+      catch (error)
+      {
+        failed = true;
+      }
+      refreshButton.disabled = false;
+      setTimeout(load, 500);
+    }
+
+    refreshButton.addEventListener("click", requestRefresh);
+
+    document.addEventListener("visibilitychange", function ()
+    {
+      if (!document.hidden)
+      {
+        load();
+      }
+    });
+
+    setInterval(function ()
+    {
+      if (!document.hidden)
+      {
+        load();
+      }
+    }, POLL_INTERVAL);
+
+    let resizeTimer = 0;
+    window.addEventListener("resize", function ()
+    {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function ()
+      {
+        if (view === "history")
+        {
+          drawCharts();
+        }
+      }, 150);
+    });
+
+    load();
+  </script>
+</body>
+</html>

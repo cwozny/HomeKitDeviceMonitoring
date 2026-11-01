@@ -60,3 +60,11 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# HomeSensors
+#
+# Your own team and bundle identifier; see Support/Signing.xcconfig.
+Support/Local.xcconfig
+# The signed Mac app that each build copies into the project folder.
+/HomeSensors.app/
+.DS_Store
