@@ -10,8 +10,6 @@ final class HTTPServer
     var path: String
     /// The Host header in lowercase, without its port or IPv6 brackets. Nil unless there is exactly one.
     var host: String?
-    /// The browser's Sec-Fetch-Site header in lowercase, for example "same-origin" or "cross-site". Nil when absent.
-    var fetchSite: String? = nil
   }
 
   struct Response
@@ -21,19 +19,10 @@ final class HTTPServer
     var body: Data
     /// The methods the path accepts, sent as the Allow header of a 405 response.
     var allow: String? = nil
-    /// Seconds until the client can try again, sent as the Retry-After header of a 429 response.
-    var retryAfter: Int? = nil
 
     static func text(_ status: String, _ message: String) -> Response
     {
       Response(status: status, contentType: "text/plain; charset=utf-8", body: Data((message + "\n").utf8))
-    }
-
-    static func tooManyRequests(retryAfter seconds: Int) -> Response
-    {
-      var response = text("429 Too Many Requests", "Too many requests. Try again in \(seconds) seconds.")
-      response.retryAfter = seconds
-      return response
     }
 
     static func methodNotAllowed(allow: String) -> Response
@@ -194,12 +183,7 @@ final class HTTPServer
         path = String(path[..<query])
       }
       let headers = lines.dropFirst()
-      response = handler(Request(
-        method: method,
-        path: path,
-        host: Self.host(in: headers),
-        fetchSite: Self.values(of: "sec-fetch-site", in: headers).first?.lowercased()
-      ))
+      response = handler(Request(method: method, path: path, host: Self.host(in: headers)))
     }
     var head = "HTTP/1.1 \(response.status)\r\n"
       + "Content-Type: \(response.contentType)\r\n"
@@ -209,10 +193,6 @@ final class HTTPServer
     if let allow = response.allow
     {
       head += "Allow: \(allow)\r\n"
-    }
-    if let retryAfter = response.retryAfter
-    {
-      head += "Retry-After: \(retryAfter)\r\n"
     }
     head += "Connection: close\r\n\r\n"
     var data = Data(head.utf8)

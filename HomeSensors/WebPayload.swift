@@ -45,8 +45,8 @@ struct WebPayload: Encodable
   }
 
   var phase: String
-  var lastRefresh: Date?
-  var isRefreshing: Bool
+  /// When the app last got information from HomeKit.
+  var lastUpdate: Date?
   var tiles: [Tile]
   var devices: [DeviceInfo]
   var build = BuildInfo.current
@@ -55,8 +55,7 @@ struct WebPayload: Encodable
   init(store: HomeStore)
   {
     phase = String(describing: store.phase)
-    lastRefresh = store.lastRefresh
-    isRefreshing = store.isRefreshing
+    lastUpdate = store.lastUpdate
     var tiles: [Tile] = []
     for tile in Summary(devices: store.devices).tiles
     {

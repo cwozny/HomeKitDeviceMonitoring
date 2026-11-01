@@ -38,15 +38,7 @@ final class WebDashboard
     let history = ReadingHistory.forLaunch()
     self.history = history
     publish()
-    let store = self.store
     let router = WebRouter(content: content, history: history, advertisedHost: hostName)
-    {
-      Task
-      {
-        @MainActor in
-        store.refreshIfStale()
-      }
-    }
     server = HTTPServer(port: Self.configuredPort, handler: router.response(for:))
     listen()
     // App Nap would throttle the app while its window is hidden; a server must answer promptly.
@@ -109,7 +101,6 @@ final class WebDashboard
         }
       }
     )
-    content.lastRefresh = store.lastRefresh
     history?.record(store.devices)
   }
 
@@ -151,7 +142,6 @@ final class WebContent: @unchecked Sendable
   let page: Data
   private let lock = NSLock()
   private var latest = Data("{}".utf8)
-  private var refreshed: Date?
 
   init(page: Data)
   {
@@ -175,25 +165,6 @@ final class WebContent: @unchecked Sendable
       }
     }
   }
-
-  /// When the last refresh finished. The server reads it to refresh at most once a minute.
-  var lastRefresh: Date?
-  {
-    get
-    {
-      lock.withLock
-      {
-        refreshed
-      }
-    }
-    set
-    {
-      lock.withLock
-      {
-        refreshed = newValue
-      }
-    }
-  }
 }
 
 /// Maps requests to responses. Runs on the server's queue.
@@ -203,7 +174,6 @@ struct WebRouter
   let history: ReadingHistory
   /// The host name in the address the app shows, which can be off the allowlist, for example "studio-mac.lan".
   var advertisedHost: String? = nil
-  let requestRefresh: () -> Void
 
   func response(for request: HTTPServer.Request) -> HTTPServer.Response
   {
@@ -221,24 +191,8 @@ struct WebRouter
       return HTTPServer.Response(status: "200 OK", contentType: "application/json; charset=utf-8", body: content.payload)
     case ("GET", "/api/history"):
       return HTTPServer.Response(status: "200 OK", contentType: "application/json; charset=utf-8", body: history.payload())
-    case ("POST", "/api/refresh"):
-      // A page on another site can send this request too. Browsers mark such requests, so refuse them.
-      if let site = request.fetchSite, site != "same-origin"
-      {
-        return .text("403 Forbidden", "Home Sensors accepts refresh requests only from its own page.")
-      }
-      // Refreshes run at most once a minute, however often they're asked for.
-      let wait = RefreshLimit.wait(after: content.lastRefresh)
-      if wait > 0
-      {
-        return .tooManyRequests(retryAfter: Int(wait.rounded(.up)))
-      }
-      requestRefresh()
-      return .text("202 Accepted", "Refreshing")
     case (_, "/"), (_, "/index.html"), (_, "/api/devices"), (_, "/api/history"):
       return .methodNotAllowed(allow: "GET, HEAD")
-    case (_, "/api/refresh"):
-      return .methodNotAllowed(allow: "POST")
     default:
       return .text("404 Not Found", "Not found")
     }

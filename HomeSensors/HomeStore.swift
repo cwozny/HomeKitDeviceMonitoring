@@ -20,6 +20,8 @@ final class HomeStore: NSObject
   private(set) var homeCount = 0
   private(set) var isRefreshing = false
   private(set) var lastRefresh: Date?
+  /// When the app last got information from HomeKit: a change that HomeKit sent, or a read.
+  private(set) var lastUpdate: Date?
 
   @ObservationIgnored private var manager: HMHomeManager?
   @ObservationIgnored private var hasReceivedHomes = false
@@ -60,8 +62,8 @@ final class HomeStore: NSObject
     }
   }
 
-  /// Re-reads values unless a refresh finished within the last minute. The Refresh buttons, the web page,
-  /// and the app coming to the front all use this. See RefreshLimit.
+  /// Re-reads values unless a refresh finished within the last minute. The Refresh button and the app
+  /// coming to the front use this. See RefreshLimit.
   func refreshIfStale()
   {
     if RefreshLimit.wait(after: lastRefresh) > 0
@@ -106,17 +108,30 @@ final class HomeStore: NSObject
   /// Reads one accessory's characteristics in sequence, which is gentler on sleepy Thread devices.
   private func load(_ accessory: HMAccessory) async
   {
+    var received = false
     for characteristic in HomeKitMapping.trackedCharacteristics(of: accessory)
     {
       let properties = characteristic.properties
       if properties.contains(HMCharacteristicPropertyReadable)
       {
-        try? await characteristic.readValue()
+        do
+        {
+          try await characteristic.readValue()
+          received = true
+        }
+        catch
+        {
+          // The value stays as it was. A later read or a pushed change updates it.
+        }
       }
       if properties.contains(HMCharacteristicPropertySupportsEventNotification) && !characteristic.isNotificationEnabled
       {
         try? await characteristic.enableNotification(true)
       }
+    }
+    if received
+    {
+      lastUpdate = .now
     }
     rebuild()
   }
@@ -272,6 +287,7 @@ extension HomeStore: @preconcurrency HMAccessoryDelegate
 
   func accessory(_ accessory: HMAccessory, service: HMService, didUpdateValueFor characteristic: HMCharacteristic)
   {
+    lastUpdate = .now
     rebuild()
   }
 }
@@ -287,6 +303,7 @@ extension HomeStore
     store.devices = SampleData.devices
     store.homeCount = 1
     store.lastRefresh = .now
+    store.lastUpdate = .now
     store.phase = .ready
     return store
   }

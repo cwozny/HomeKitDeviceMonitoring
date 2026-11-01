@@ -141,9 +141,9 @@ struct DashboardView: View
     {
       Text("Updating…")
     }
-    else if let lastRefresh = store.lastRefresh
+    else if let lastUpdate = store.lastUpdate
     {
-      Text("Updated \(lastRefresh, format: .dateTime.hour().minute())")
+      Text("Updated \(lastUpdate, format: .dateTime.hour().minute())")
     }
   }
 

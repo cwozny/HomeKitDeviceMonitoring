@@ -101,54 +101,6 @@
       white-space: nowrap;
     }
 
-    .refresh
-    {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 36px;
-      height: 36px;
-      padding: 0;
-      border: 0;
-      border-radius: 18px;
-      background: var(--card);
-      color: var(--accent);
-      cursor: pointer;
-    }
-
-    .refresh svg
-    {
-      width: 18px;
-      height: 18px;
-    }
-
-    .refresh:disabled
-    {
-      opacity: 0.4;
-      cursor: default;
-    }
-
-    .refresh.spinning svg
-    {
-      animation: spin 1s linear infinite;
-    }
-
-    @media (prefers-reduced-motion: reduce)
-    {
-      .refresh.spinning svg
-      {
-        animation: none;
-      }
-    }
-
-    @keyframes spin
-    {
-      to
-      {
-        transform: rotate(360deg);
-      }
-    }
-
     .banner
     {
       display: flex;
@@ -662,9 +614,6 @@
       <h1>Home Sensors</h1>
       <div class="updated">
         <span id="updated"></span>
-        <button class="refresh" id="refresh" type="button" aria-label="Refresh readings">
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10a6 6 0 1 1-1.76-4.24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M15 2.5v3.5h-3.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
       </div>
     </header>
     <div class="banner" id="banner" role="status" hidden>
@@ -702,14 +651,11 @@
     const content = document.getElementById("content");
     const updated = document.getElementById("updated");
     const banner = document.getElementById("banner");
-    const refreshButton = document.getElementById("refresh");
     const buildFooter = document.getElementById("build");
 
     let latest = null;
     let failed = false;
     let loading = false;
-    // The one pending quick reload while the app refreshes. Each load replaces it, so reloads don't pile up.
-    let refreshPoll = 0;
     let view = readView();
     const viewControl = buildViewControl();
 
@@ -785,7 +731,6 @@
     {
       banner.hidden = !failed;
       content.classList.toggle("stale", failed && latest !== null);
-      refreshButton.classList.toggle("spinning", Boolean(latest && latest.isRefreshing && !failed));
       if (latest === null)
       {
         if (failed)
@@ -794,13 +739,11 @@
         }
         return;
       }
-      if (latest.isRefreshing)
+      // When the app last got information from HomeKit. The app re-reads everything every 15 minutes,
+      // so an older time means it has stopped hearing from HomeKit.
+      if (latest.lastUpdate)
       {
-        updated.textContent = "Updating…";
-      }
-      else if (latest.lastRefresh)
-      {
-        updated.textContent = "Updated " + formatTime(latest.lastRefresh);
+        updated.textContent = "Updated " + formatTime(latest.lastUpdate);
       }
       renderBuild(latest.build);
       if (latest.phase !== "ready")
@@ -1784,7 +1727,6 @@
         return;
       }
       loading = true;
-      const wasRefreshing = Boolean(latest && latest.isRefreshing);
       try
       {
         const response = await fetch("/api/devices", { cache: "no-store" });
@@ -1794,11 +1736,6 @@
         }
         latest = await response.json();
         failed = false;
-        if (wasRefreshing && !latest.isRefreshing)
-        {
-          // A finished refresh has just recorded new readings.
-          historyDueAt = 0;
-        }
       }
       catch (error)
       {
@@ -1810,48 +1747,7 @@
       }
       render();
       loadHistoryIfDue();
-      // Checks back soon while the app refreshes, but not while it can't be reached; the regular poll retries then.
-      clearTimeout(refreshPoll);
-      if (latest && latest.isRefreshing && !failed)
-      {
-        refreshPoll = setTimeout(load, 2000);
-      }
     }
-
-    async function requestRefresh()
-    {
-      refreshButton.disabled = true;
-      let retryAfter = 0;
-      try
-      {
-        const response = await fetch("/api/refresh", { method: "POST", cache: "no-store" });
-        if (response.status === 429)
-        {
-          retryAfter = Number(response.headers.get("Retry-After")) || 60;
-        }
-      }
-      catch (error)
-      {
-        failed = true;
-      }
-      if (retryAfter > 0)
-      {
-        // The app refreshes at most once a minute. The button stays off until it can refresh again.
-        refreshButton.title = "Refreshed less than a minute ago";
-        setTimeout(function ()
-        {
-          refreshButton.disabled = false;
-          refreshButton.title = "";
-        }, retryAfter * 1000);
-      }
-      else
-      {
-        refreshButton.disabled = false;
-      }
-      setTimeout(load, 500);
-    }
-
-    refreshButton.addEventListener("click", requestRefresh);
 
     document.addEventListener("visibilitychange", function ()
     {

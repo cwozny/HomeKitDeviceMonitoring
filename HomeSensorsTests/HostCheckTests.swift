@@ -53,35 +53,11 @@ struct HostCheckTests
     #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/missing", host: "localhost")).status == "404 Not Found")
   }
 
-  @Test("Asks for a refresh only for POST /api/refresh from an allowed host")
-  func requestsRefresh()
+  @Test("Has no refresh request; the page only reads")
+  func noRefreshRequest()
   {
-    let counter = Counter()
-    let router = makeRouter
-    {
-      counter.count += 1
-    }
-    _ = router.response(for: HTTPServer.Request(method: "GET", path: "/api/refresh", host: "localhost"))
-    _ = router.response(for: HTTPServer.Request(method: "POST", path: "/api/refresh", host: "example.com"))
-    #expect(counter.count == 0)
-    #expect(router.response(for: HTTPServer.Request(method: "POST", path: "/api/refresh", host: "localhost")).status == "202 Accepted")
-    #expect(counter.count == 1)
-  }
-
-  @Test("Refuses a refresh that a page on another site asks for")
-  func refusesCrossSiteRefresh()
-  {
-    let counter = Counter()
-    let router = makeRouter
-    {
-      counter.count += 1
-    }
-    let crossSite = HTTPServer.Request(method: "POST", path: "/api/refresh", host: "192.168.1.20", fetchSite: "cross-site")
-    #expect(router.response(for: crossSite).status == "403 Forbidden")
-    #expect(counter.count == 0)
-    let sameOrigin = HTTPServer.Request(method: "POST", path: "/api/refresh", host: "192.168.1.20", fetchSite: "same-origin")
-    #expect(router.response(for: sameOrigin).status == "202 Accepted")
-    #expect(counter.count == 1)
+    let router = makeRouter()
+    #expect(router.response(for: HTTPServer.Request(method: "POST", path: "/api/refresh", host: "localhost")).status == "404 Not Found")
   }
 
   @Test("Accepts the host name in the address the app shows, even when the allowlist doesn't")
@@ -100,28 +76,12 @@ struct HostCheckTests
     let delete = router.response(for: HTTPServer.Request(method: "DELETE", path: "/api/devices", host: "localhost"))
     #expect(delete.status == "405 Method Not Allowed")
     #expect(delete.allow == "GET, HEAD")
-    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/api/refresh", host: "localhost")).allow == "POST")
   }
 
-  private func makeRouter(advertisedHost: String? = nil, requestRefresh: @escaping () -> Void = ignoreRefresh) -> WebRouter
+  private func makeRouter(advertisedHost: String? = nil) -> WebRouter
   {
-    WebRouter(
-      content: WebContent(page: Data("<!doctype html>".utf8)),
-      history: ReadingHistory(fileURL: nil),
-      advertisedHost: advertisedHost,
-      requestRefresh: requestRefresh
-    )
+    WebRouter(content: WebContent(page: Data("<!doctype html>".utf8)), history: ReadingHistory(fileURL: nil), advertisedHost: advertisedHost)
   }
-}
-
-/// Stands in for a refresh in tests that don't count refreshes.
-private func ignoreRefresh()
-{
-}
-
-private final class Counter
-{
-  var count = 0
 }
 
 @Suite("Host header")

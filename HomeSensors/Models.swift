@@ -180,8 +180,8 @@ struct Summary
   }
 }
 
-/// Refreshes that people ask for run at most once a minute: the Refresh buttons in the app and on the web page,
-/// and the app coming to the front. HomeKit's own updates still load right away.
+/// Refreshes that people ask for run at most once a minute: the app's Refresh button and the app coming to
+/// the front. HomeKit's own updates still load right away.
 enum RefreshLimit
 {
   static let interval: TimeInterval = 60
