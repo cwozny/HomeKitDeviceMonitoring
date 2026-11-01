@@ -60,10 +60,11 @@ final class HomeStore: NSObject
     }
   }
 
-  /// Re-reads values unless a refresh finished within the last minute.
+  /// Re-reads values unless a refresh finished within the last minute. The Refresh buttons, the web page,
+  /// and the app coming to the front all use this. See RefreshLimit.
   func refreshIfStale()
   {
-    if let lastRefresh, Date.now.timeIntervalSince(lastRefresh) < 60
+    if RefreshLimit.wait(after: lastRefresh) > 0
     {
       return
     }

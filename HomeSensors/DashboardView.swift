@@ -6,6 +6,8 @@ struct DashboardView: View
   @Environment(WebDashboard.self) private var web
   @Environment(\.scenePhase) private var scenePhase
   @State private var grouping = Grouping.room
+  /// False within a minute of the last refresh, when the store won't refresh again yet.
+  @State private var canRefresh = true
 
   var body: some View
   {
@@ -27,6 +29,10 @@ struct DashboardView: View
       {
         store.refreshIfStale()
       }
+    }
+    .task(id: store.lastRefresh)
+    {
+      await holdRefreshButton()
     }
   }
 
@@ -153,15 +159,33 @@ struct DashboardView: View
     {
       Button("Refresh", systemImage: "arrow.clockwise", action: refresh)
         .keyboardShortcut("r")
-        .disabled(store.phase != .ready)
+        .disabled(store.phase != .ready || !canRefresh)
+        .help(canRefresh ? "Refresh readings" : "Refreshed less than a minute ago")
     }
   }
 
   private func refresh()
   {
-    Task
+    store.refreshIfStale()
+  }
+
+  /// Keeps the Refresh button off until the store can refresh again.
+  private func holdRefreshButton() async
+  {
+    let wait = RefreshLimit.wait(after: store.lastRefresh)
+    canRefresh = wait == 0
+    if wait == 0
     {
-      await store.refresh()
+      return
+    }
+    do
+    {
+      try await Task.sleep(for: .seconds(wait))
+      canRefresh = true
+    }
+    catch
+    {
+      // A newer refresh restarted the wait.
     }
   }
 }

@@ -180,6 +180,29 @@ struct Summary
   }
 }
 
+/// Refreshes that people ask for run at most once a minute: the Refresh buttons in the app and on the web page,
+/// and the app coming to the front. HomeKit's own updates still load right away.
+enum RefreshLimit
+{
+  static let interval: TimeInterval = 60
+
+  /// Seconds until a requested refresh can run. Zero when it can run now.
+  static func wait(after lastRefresh: Date?, now: Date = .now) -> TimeInterval
+  {
+    guard let lastRefresh else
+    {
+      return 0
+    }
+    let elapsed = now.timeIntervalSince(lastRefresh)
+    // A last refresh in the future means the clock went back. Don't block refreshes until it catches up.
+    if elapsed < 0
+    {
+      return 0
+    }
+    return max(0, interval - elapsed)
+  }
+}
+
 enum Grouping: String, CaseIterable, Identifiable
 {
   case room = "Room"

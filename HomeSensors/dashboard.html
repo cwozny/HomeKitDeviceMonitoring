@@ -122,6 +122,12 @@
       height: 18px;
     }
 
+    .refresh:disabled
+    {
+      opacity: 0.4;
+      cursor: default;
+    }
+
     .refresh.spinning svg
     {
       animation: spin 1s linear infinite;
@@ -1815,15 +1821,33 @@
     async function requestRefresh()
     {
       refreshButton.disabled = true;
+      let retryAfter = 0;
       try
       {
-        await fetch("/api/refresh", { method: "POST", cache: "no-store" });
+        const response = await fetch("/api/refresh", { method: "POST", cache: "no-store" });
+        if (response.status === 429)
+        {
+          retryAfter = Number(response.headers.get("Retry-After")) || 60;
+        }
       }
       catch (error)
       {
         failed = true;
       }
-      refreshButton.disabled = false;
+      if (retryAfter > 0)
+      {
+        // The app refreshes at most once a minute. The button stays off until it can refresh again.
+        refreshButton.title = "Refreshed less than a minute ago";
+        setTimeout(function ()
+        {
+          refreshButton.disabled = false;
+          refreshButton.title = "";
+        }, retryAfter * 1000);
+      }
+      else
+      {
+        refreshButton.disabled = false;
+      }
       setTimeout(load, 500);
     }
 

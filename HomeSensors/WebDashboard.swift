@@ -44,7 +44,7 @@ final class WebDashboard
       Task
       {
         @MainActor in
-        await store.refresh()
+        store.refreshIfStale()
       }
     }
     server = HTTPServer(port: Self.configuredPort, handler: router.response(for:))
@@ -109,6 +109,7 @@ final class WebDashboard
         }
       }
     )
+    content.lastRefresh = store.lastRefresh
     history?.record(store.devices)
   }
 
@@ -150,6 +151,7 @@ final class WebContent: @unchecked Sendable
   let page: Data
   private let lock = NSLock()
   private var latest = Data("{}".utf8)
+  private var refreshed: Date?
 
   init(page: Data)
   {
@@ -170,6 +172,25 @@ final class WebContent: @unchecked Sendable
       lock.withLock
       {
         latest = newValue
+      }
+    }
+  }
+
+  /// When the last refresh finished. The server reads it to refresh at most once a minute.
+  var lastRefresh: Date?
+  {
+    get
+    {
+      lock.withLock
+      {
+        refreshed
+      }
+    }
+    set
+    {
+      lock.withLock
+      {
+        refreshed = newValue
       }
     }
   }
@@ -205,6 +226,12 @@ struct WebRouter
       if let site = request.fetchSite, site != "same-origin"
       {
         return .text("403 Forbidden", "Home Sensors accepts refresh requests only from its own page.")
+      }
+      // Refreshes run at most once a minute, however often they're asked for.
+      let wait = RefreshLimit.wait(after: content.lastRefresh)
+      if wait > 0
+      {
+        return .tooManyRequests(retryAfter: Int(wait.rounded(.up)))
       }
       requestRefresh()
       return .text("202 Accepted", "Refreshing")
