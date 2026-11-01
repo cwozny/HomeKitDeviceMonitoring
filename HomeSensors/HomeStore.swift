@@ -194,6 +194,14 @@ extension HomeStore: @preconcurrency HMHomeManagerDelegate
   {
     attachDelegates()
     rebuild()
+    // A shared home arrives with its accessories. Read them and turn on their notifications.
+    for accessory in home.accessories
+    {
+      Task
+      {
+        await load(accessory)
+      }
+    }
   }
 
   func homeManager(_ manager: HMHomeManager, didRemove home: HMHome)

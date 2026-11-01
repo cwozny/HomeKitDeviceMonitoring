@@ -702,6 +702,8 @@
     let latest = null;
     let failed = false;
     let loading = false;
+    // The one pending quick reload while the app refreshes. Each load replaces it, so reloads don't pile up.
+    let refreshPoll = 0;
     let view = readView();
     const viewControl = buildViewControl();
 
@@ -713,6 +715,8 @@
     let historyKey = "";
     let liveValues = [];
     let liveCards = [];
+    // The chart that had focus when new history replaced the charts, to focus again once they're drawn.
+    let refocus = null;
 
     function readView()
     {
@@ -775,7 +779,7 @@
     {
       banner.hidden = !failed;
       content.classList.toggle("stale", failed && latest !== null);
-      refreshButton.classList.toggle("spinning", Boolean(latest && latest.isRefreshing));
+      refreshButton.classList.toggle("spinning", Boolean(latest && latest.isRefreshing && !failed));
       if (latest === null)
       {
         if (failed)
@@ -809,6 +813,7 @@
       if (view === "history")
       {
         drawCharts();
+        restoreFocus();
       }
     }
 
@@ -1051,16 +1056,64 @@
       const key = historySignature(devices);
       if (historyNode === null || key !== historyKey)
       {
+        const previous = historyNode;
         liveValues = [];
         liveCards = [];
         historyNode = buildHistory(devices);
         historyKey = key;
+        if (previous !== null)
+        {
+          keepViewState(previous, historyNode);
+        }
       }
       else
       {
         updateLive(devices);
       }
       return historyNode;
+    }
+
+    // Every history load rebuilds the charts. Keeps open tables open, and notes the focused chart and its reading.
+    function keepViewState(previous, next)
+    {
+      const open = new Set();
+      for (const details of previous.querySelectorAll("details[open]"))
+      {
+        open.add(details.dataset.key);
+      }
+      for (const details of next.querySelectorAll("details"))
+      {
+        details.open = open.has(details.dataset.key);
+      }
+      const focused = document.activeElement;
+      if (focused && focused.chart && previous.contains(focused))
+      {
+        const chart = focused.chart;
+        refocus = { key: focused.dataset.key, time: chart.active >= 0 ? chart.series.points[chart.active][0] : null };
+      }
+    }
+
+    // Focuses the rebuilt chart that had focus, at the reading nearest the one it showed. Needs the charts drawn.
+    function restoreFocus()
+    {
+      if (refocus === null || historyNode === null)
+      {
+        return;
+      }
+      const target = refocus;
+      refocus = null;
+      for (const figure of historyNode.querySelectorAll("figure.chart"))
+      {
+        if (figure.dataset.key === target.key)
+        {
+          if (target.time !== null)
+          {
+            figure.chart.active = nearestIndex(figure.chart.series.points, target.time);
+          }
+          figure.focus({ preventScroll: true });
+          return;
+        }
+      }
     }
 
     // Charts are rebuilt only when new history arrives or devices are renamed or moved.
@@ -1166,7 +1219,9 @@
         low = Math.min(low, point[1]);
         high = Math.max(high, point[1]);
       }
+      const key = device.id + "/" + series.kind;
       const figure = element("figure", "chart");
+      figure.dataset.key = key;
       figure.tabIndex = 0;
       figure.setAttribute("role", "group");
       figure.setAttribute("aria-label", device.name + " " + series.name.toLowerCase() + " " + period + ": low " + withUnit(low, series) + ", high " + withUnit(high, series) + ". Use the arrow keys to read values.");
@@ -1191,16 +1246,17 @@
       {
         stepPoint(figure, event);
       });
-      block.append(head, element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)), figure, renderTable(series));
+      block.append(head, element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)), figure, renderTable(series, key));
       return block;
     }
 
-    // The value the Room view shows, so both views agree.
+    // The value the Room view shows, so both views agree. Matched by kind, because names repeat:
+    // a carbon dioxide sensor has both a "detected" reading and a level reading.
     function liveText(device, series)
     {
       for (const reading of device.readings)
       {
-        if (reading.name === series.name)
+        if (reading.kind === series.kind)
         {
           return reading.text;
         }
@@ -1238,9 +1294,10 @@
     }
 
     // The table twin of a chart: one row per day, newest first.
-    function renderTable(series)
+    function renderTable(series, chartKey)
     {
       const details = element("details", "table-view");
+      details.dataset.key = chartKey;
       details.append(element("summary", null, "Daily low and high"));
       const days = [];
       let current = null;
@@ -1747,9 +1804,11 @@
       }
       render();
       loadHistoryIfDue();
-      if (latest && latest.isRefreshing)
+      // Checks back soon while the app refreshes, but not while it can't be reached; the regular poll retries then.
+      clearTimeout(refreshPoll);
+      if (latest && latest.isRefreshing && !failed)
       {
-        setTimeout(load, 2000);
+        refreshPoll = setTimeout(load, 2000);
       }
     }
 

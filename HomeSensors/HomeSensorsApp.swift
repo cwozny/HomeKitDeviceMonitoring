@@ -12,8 +12,15 @@ struct HomeSensorsApp: App
   init()
   {
     let store = HomeStore.forLaunch()
+    let web = WebDashboard(store: store)
     _store = State(initialValue: store)
-    _web = State(initialValue: WebDashboard(store: store))
+    _web = State(initialValue: web)
+    // Started here, not from a view, so they also run when the app gets no window.
+    if !Self.isRunningTests
+    {
+      store.start()
+      web.start()
+    }
   }
 
   var body: some Scene
@@ -29,10 +36,6 @@ struct HomeSensorsApp: App
         DashboardView()
           .environment(store)
           .environment(web)
-          .task
-          {
-            web.start()
-          }
           #if targetEnvironment(macCatalyst)
           .frame(minWidth: 760, minHeight: 480)
           #endif

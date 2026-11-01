@@ -42,6 +42,44 @@ struct HTTPServerTests
     #expect(result.reply.hasPrefix("HTTP/1.1 400 Bad Request\r\n"))
   }
 
+  @Test("Gives the handler the browser's Sec-Fetch-Site header in lowercase")
+  func readsFetchSite() async throws
+  {
+    let server = HTTPServer(port: 0)
+    {
+      request in
+      .text("200 OK", request.fetchSite ?? "none")
+    }
+    defer
+    {
+      server.stop()
+    }
+    let port = try await startListening(server)
+    let result = try await exchange(port: port, request: "POST /api/refresh HTTP/1.1\r\nHost: localhost\r\nSec-Fetch-Site: Cross-Site\r\n\r\n")
+    #expect(result.reply.hasSuffix("\r\n\r\ncross-site\n"))
+  }
+
+  @Test("Answers HEAD with the headers only, and sends Allow with a 405")
+  func answersHeadWithoutBody() async throws
+  {
+    let server = HTTPServer(port: 0)
+    {
+      request in
+      request.method == "HEAD" ? .text("200 OK", "OK") : .methodNotAllowed(allow: "GET, HEAD")
+    }
+    defer
+    {
+      server.stop()
+    }
+    let port = try await startListening(server)
+    let head = try await exchange(port: port, request: "HEAD / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+    #expect(head.reply.hasPrefix("HTTP/1.1 200 OK\r\n"))
+    #expect(head.reply.contains("Content-Length: 3\r\n"))
+    #expect(head.reply.hasSuffix("\r\n\r\n"))
+    let delete = try await exchange(port: port, request: "DELETE / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+    #expect(delete.reply.contains("Allow: GET, HEAD\r\n"))
+  }
+
   @Test("Closes a connection that sends nothing when the time limit ends")
   func closesIdleConnections() async throws
   {

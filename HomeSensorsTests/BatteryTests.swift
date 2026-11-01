@@ -44,6 +44,27 @@ struct BatteryTests
     #expect(summary.lowest?.name == "Low")
   }
 
+  @Test("The Low battery tile shows the worst status, though a low flag without a level sorts first")
+  func lowBatteryTileStatus()
+  {
+    let devices = [
+      makeDevice("Flagged low", battery: Battery(isLowFlagged: true)),
+      makeDevice("Critical", battery: Battery(level: 5)),
+    ]
+    let tile = Summary(devices: devices).tiles[1]
+    #expect(tile.label == "Low battery")
+    #expect(tile.status == .critical)
+  }
+
+  @Test("The Low battery tile says all are above 20% only when every battery reported a level")
+  func lowBatteryTileDetail()
+  {
+    let known = Summary(devices: [makeDevice("Full", battery: Battery(level: 90))]).tiles[1]
+    #expect(known.detail == "All above 20%")
+    let unknown = Summary(devices: [makeDevice("Full", battery: Battery(level: 90)), makeDevice("Unknown level", battery: Battery())]).tiles[1]
+    #expect(unknown.detail == "None reported low")
+  }
+
   private var sampleDevices: [DeviceSnapshot]
   {
     [

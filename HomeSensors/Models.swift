@@ -144,6 +144,8 @@ struct Summary
 {
   var deviceCount = 0
   var batteryCount = 0
+  /// Batteries that have reported a level.
+  var levelCount = 0
   /// Sorted lowest battery first.
   var lowBattery: [DeviceSnapshot] = []
   var notResponding: [DeviceSnapshot] = []
@@ -157,6 +159,10 @@ struct Summary
       if device.battery != nil
       {
         batteryCount += 1
+      }
+      if device.hasBatteryLevel
+      {
+        levelCount += 1
       }
       if device.hasLowBattery
       {

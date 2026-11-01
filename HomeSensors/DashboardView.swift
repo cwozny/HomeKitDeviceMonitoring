@@ -21,10 +21,6 @@ struct DashboardView: View
           }
         }
     }
-    .task
-    {
-      store.start()
-    }
     .onChange(of: scenePhase)
     {
       if scenePhase == .active

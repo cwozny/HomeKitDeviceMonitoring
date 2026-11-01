@@ -24,6 +24,8 @@ struct WebPayload: Encodable
   {
     var name: String
     var text: String
+    /// The `kind` of the history series for this reading. Nil for kinds the History view doesn't chart.
+    var kind: String?
     var alert: String?
     var active: Bool
     var quiet: Bool
@@ -101,6 +103,7 @@ extension WebPayload.DeviceInfo
       readings.append(WebPayload.ReadingInfo(
         name: reading.name,
         text: text,
+        kind: reading.kind.historyKey,
         alert: reading.alert.map(String.init(describing:)),
         active: reading.isActive,
         quiet: reading.isQuiet

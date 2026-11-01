@@ -68,9 +68,49 @@ struct HostCheckTests
     #expect(counter.count == 1)
   }
 
-  private func makeRouter(requestRefresh: @escaping () -> Void = ignoreRefresh) -> WebRouter
+  @Test("Refuses a refresh that a page on another site asks for")
+  func refusesCrossSiteRefresh()
   {
-    WebRouter(content: WebContent(page: Data("<!doctype html>".utf8)), history: ReadingHistory(fileURL: nil), requestRefresh: requestRefresh)
+    let counter = Counter()
+    let router = makeRouter
+    {
+      counter.count += 1
+    }
+    let crossSite = HTTPServer.Request(method: "POST", path: "/api/refresh", host: "192.168.1.20", fetchSite: "cross-site")
+    #expect(router.response(for: crossSite).status == "403 Forbidden")
+    #expect(counter.count == 0)
+    let sameOrigin = HTTPServer.Request(method: "POST", path: "/api/refresh", host: "192.168.1.20", fetchSite: "same-origin")
+    #expect(router.response(for: sameOrigin).status == "202 Accepted")
+    #expect(counter.count == 1)
+  }
+
+  @Test("Accepts the host name in the address the app shows, even when the allowlist doesn't")
+  func acceptsAdvertisedHost()
+  {
+    let router = makeRouter(advertisedHost: "studio-mac.lan")
+    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "studio-mac.lan")).status == "200 OK")
+    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "other-mac.lan")).status == "403 Forbidden")
+  }
+
+  @Test("Answers HEAD like GET and names the allowed methods when it refuses one")
+  func headAndAllowedMethods()
+  {
+    let router = makeRouter()
+    #expect(router.response(for: HTTPServer.Request(method: "HEAD", path: "/", host: "localhost")).status == "200 OK")
+    let delete = router.response(for: HTTPServer.Request(method: "DELETE", path: "/api/devices", host: "localhost"))
+    #expect(delete.status == "405 Method Not Allowed")
+    #expect(delete.allow == "GET, HEAD")
+    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/api/refresh", host: "localhost")).allow == "POST")
+  }
+
+  private func makeRouter(advertisedHost: String? = nil, requestRefresh: @escaping () -> Void = ignoreRefresh) -> WebRouter
+  {
+    WebRouter(
+      content: WebContent(page: Data("<!doctype html>".utf8)),
+      history: ReadingHistory(fileURL: nil),
+      advertisedHost: advertisedHost,
+      requestRefresh: requestRefresh
+    )
   }
 }
 

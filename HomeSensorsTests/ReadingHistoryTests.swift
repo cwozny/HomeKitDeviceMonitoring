@@ -5,8 +5,10 @@ import Testing
 @Suite("Reading history")
 struct ReadingHistoryTests
 {
-  /// Whole seconds, because the history file stores whole seconds.
-  private let start = Date(timeIntervalSince1970: (Date.now.timeIntervalSince1970 - 3_600).rounded(.down))
+  /// An hour ago, on a bucket boundary. Buckets follow the clock, and the history file stores whole seconds.
+  private let start = Date(
+    timeIntervalSince1970: ((Date.now.timeIntervalSince1970 - 3_600) / ReadingHistory.bucketSeconds).rounded(.down) * ReadingHistory.bucketSeconds
+  )
   private let deviceID = UUID()
 
   @Test("Records first values, changes after a minute, and unchanged values every 10 minutes")
@@ -58,7 +60,7 @@ struct ReadingHistoryTests
     history.record([sensor(temperature: 20, humidity: 50)], at: start)
     history.record([sensor(temperature: 21, humidity: 50)], at: start + 90)
     history.record([sensor(temperature: 21, humidity: 50)], at: start + 720)
-    // An hour later, `start` falls exactly on a bucket boundary.
+    // `start` is on a bucket boundary, so the first two readings share a bucket.
     let payload = try decode(history.payload(at: start + 3_600))
     let temperatures = payload.series.filter
     {
@@ -89,6 +91,71 @@ struct ReadingHistoryTests
     _ = ReadingHistory(fileURL: file)
     let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
     #expect(lines.count == 2)
+  }
+
+  @Test("Gives the same points whenever the page asks, because buckets follow the clock")
+  func bucketsFollowTheClock() throws
+  {
+    let history = ReadingHistory(fileURL: nil)
+    history.record([sensor(temperature: 20, humidity: 50)], at: start + 240)
+    history.record([sensor(temperature: 20, humidity: 54)], at: start + 420)
+    history.record([sensor(temperature: 20, humidity: 54)], at: start + 1_080)
+    let first = try decode(history.payload(at: start + 3_600)).series.map(\.points)
+    let later = try decode(history.payload(at: start + 3_900)).series.map(\.points)
+    #expect(first == later)
+  }
+
+  @Test("Ignores lines with values or times it can't use when it loads the file")
+  func ignoresUnusableLines() throws
+  {
+    let file = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+    }
+    let time = Int(start.timeIntervalSince1970)
+    let device = deviceID.uuidString
+    let lines = [
+      "\(time)\t\(device)\thumidity\t50",
+      "\(time + 60)\t\(device)\thumidity\tnan",
+      "\(time + 120)\t\(device)\thumidity\tinf",
+      "\(time + 180)\t\(device)\thumidity\t1e400",
+      "inf\t\(device)\thumidity\t51",
+      "\(Int(Date.now.timeIntervalSince1970) + 86_400)\t\(device)\thumidity\t52",
+    ]
+    try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file)
+    let points = try decode(ReadingHistory(fileURL: file).payload(at: start + 3_600)).series.map(\.points)
+    #expect(points == [[[Double(time), 50]]])
+    let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    #expect(kept.count == 1)
+  }
+
+  @Test("Keeps recording after the clock goes back")
+  func recordsAfterClockGoesBack() throws
+  {
+    let history = ReadingHistory(fileURL: nil)
+    history.record([sensor(temperature: 20, humidity: 50)], at: start + 1_200)
+    // The clock goes back 10 minutes: the reading from the future is dropped, and the new one is recorded.
+    history.record([sensor(temperature: 20, humidity: 55)], at: start + 600)
+    let payload = try decode(history.payload(at: start + 660))
+    let humidities = payload.series.filter
+    {
+      $0.kind == "humidity"
+    }
+    let humidity = try #require(humidities.first)
+    #expect(humidity.points == [[start.timeIntervalSince1970 + 600, 55]])
+  }
+
+  @Test("The page data names each reading's history series, because a level and its detected flag share a name")
+  func readingsNameTheirSeries()
+  {
+    let readings = [
+      Reading(kind: .carbonDioxideDetected, value: 0),
+      Reading(kind: .carbonDioxide, value: 712),
+    ]
+    let info = WebPayload.DeviceInfo(device: makeDevice("Air monitor", readings: readings), showHome: false)
+    let kinds = info.readings.map(\.kind)
+    #expect(kinds == [nil, "co2"])
   }
 
   private func sensor(temperature: Double, humidity: Double, reachable: Bool = true) -> DeviceSnapshot

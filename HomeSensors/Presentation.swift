@@ -64,13 +64,20 @@ extension Summary
     {
       lowestStatus = severity
     }
+    var lowDetail = Self.names(lowBattery)
+    if lowBattery.isEmpty
+    {
+      // Only a reported level shows that a battery is above the threshold.
+      lowDetail = levelCount == batteryCount ? "All above \(Battery.lowThreshold)%" : "None reported low"
+    }
     return [
       SummaryTile(label: "Devices", value: deviceCount.formatted(), detail: "\(batteryCount) on battery"),
       SummaryTile(
         label: "Low battery",
         value: lowBattery.count.formatted(),
-        detail: lowBattery.isEmpty ? "All above \(Battery.lowThreshold)%" : Self.names(lowBattery),
-        status: lowBattery.first?.battery?.severity
+        detail: lowDetail,
+        // The list puts low flags without a level first, so the worst status can come later.
+        status: lowBattery.compactMap(\.battery?.severity).max()
       ),
       SummaryTile(
         label: "Not responding",

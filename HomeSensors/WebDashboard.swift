@@ -9,12 +9,16 @@ import Observation
 final class WebDashboard
 {
   static let defaultPort: UInt16 = 8080
+  /// How long to wait before listening again after the server fails, for example while another app holds the port.
+  private static let retryDelay = Duration.seconds(30)
 
   private(set) var address: String?
   private(set) var failure: String?
 
   private let store: HomeStore
   private let content = WebContent(page: WebDashboard.loadPage())
+  /// The host name in the address the app shows. The server accepts it even when the allowlist doesn't.
+  private let hostName = WebDashboard.localHostName
   @ObservationIgnored private var server: HTTPServer?
   @ObservationIgnored private var history: ReadingHistory?
   @ObservationIgnored private var activity: NSObjectProtocol?
@@ -35,7 +39,7 @@ final class WebDashboard
     self.history = history
     publish()
     let store = self.store
-    let router = WebRouter(content: content, history: history)
+    let router = WebRouter(content: content, history: history, advertisedHost: hostName)
     {
       Task
       {
@@ -43,13 +47,8 @@ final class WebDashboard
         await store.refresh()
       }
     }
-    let server = HTTPServer(port: Self.configuredPort, handler: router.response(for:))
-    server.start
-    {
-      [weak self] state in
-      self?.update(state)
-    }
-    self.server = server
+    server = HTTPServer(port: Self.configuredPort, handler: router.response(for:))
+    listen()
     // App Nap would throttle the app while its window is hidden; a server must answer promptly.
     activity = ProcessInfo.processInfo.beginActivity(
       options: .userInitiatedAllowingIdleSystemSleep,
@@ -58,16 +57,38 @@ final class WebDashboard
     #endif
   }
 
+  private func listen()
+  {
+    server?.start
+    {
+      [weak self] state in
+      self?.update(state)
+    }
+  }
+
   private func update(_ state: HTTPServer.State)
   {
     switch state
     {
     case .listening(let port):
-      address = "http://\(Self.hostName):\(port)"
+      address = "http://\(hostName):\(port)"
       failure = nil
     case .failed(let message):
       address = nil
       failure = "Web dashboard unavailable: \(message)"
+      listenAgainLater()
+    }
+  }
+
+  /// The app keeps running after the server fails, so nothing else would start it again.
+  private func listenAgainLater()
+  {
+    server?.stop()
+    Task
+    {
+      [weak self] in
+      try? await Task.sleep(for: WebDashboard.retryDelay)
+      self?.listen()
     }
   }
 
@@ -102,7 +123,7 @@ final class WebDashboard
     return defaultPort
   }
 
-  private static var hostName: String
+  private static var localHostName: String
   {
     var buffer = [CChar](repeating: 0, count: 256)
     guard gethostname(&buffer, buffer.count) == 0 else
@@ -159,15 +180,19 @@ struct WebRouter
 {
   let content: WebContent
   let history: ReadingHistory
+  /// The host name in the address the app shows, which can be off the allowlist, for example "studio-mac.lan".
+  var advertisedHost: String? = nil
   let requestRefresh: () -> Void
 
   func response(for request: HTTPServer.Request) -> HTTPServer.Response
   {
-    guard let host = request.host, Self.allows(host: host) else
+    guard let host = request.host, host == advertisedHost || Self.allows(host: host) else
     {
       return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or a Tailscale name.")
     }
-    switch (request.method, request.path)
+    // HEAD gets the answer GET would get; the server leaves out the body.
+    let method = request.method == "HEAD" ? "GET" : request.method
+    switch (method, request.path)
     {
     case ("GET", "/"), ("GET", "/index.html"):
       return HTTPServer.Response(status: "200 OK", contentType: "text/html; charset=utf-8", body: content.page)
@@ -176,10 +201,17 @@ struct WebRouter
     case ("GET", "/api/history"):
       return HTTPServer.Response(status: "200 OK", contentType: "application/json; charset=utf-8", body: history.payload())
     case ("POST", "/api/refresh"):
+      // A page on another site can send this request too. Browsers mark such requests, so refuse them.
+      if let site = request.fetchSite, site != "same-origin"
+      {
+        return .text("403 Forbidden", "Home Sensors accepts refresh requests only from its own page.")
+      }
       requestRefresh()
       return .text("202 Accepted", "Refreshing")
-    case (_, "/"), (_, "/index.html"), (_, "/api/devices"), (_, "/api/history"), (_, "/api/refresh"):
-      return .text("405 Method Not Allowed", "Method not allowed")
+    case (_, "/"), (_, "/index.html"), (_, "/api/devices"), (_, "/api/history"):
+      return .methodNotAllowed(allow: "GET, HEAD")
+    case (_, "/api/refresh"):
+      return .methodNotAllowed(allow: "POST")
     default:
       return .text("404 Not Found", "Not found")
     }

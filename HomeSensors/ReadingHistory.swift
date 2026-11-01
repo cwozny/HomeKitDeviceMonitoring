@@ -89,6 +89,14 @@ final class ReadingHistory: @unchecked Sendable
             continue
           }
           let key = Key(device: device.id, kind: reading.kind)
+          if let last = series[key]?.last, last.time > now
+          {
+            // The clock went back. Samples from the future would stop recording until it caught up.
+            series[key] = series[key]?.filter
+            {
+              $0.time <= now
+            }
+          }
           if let last = series[key]?.last
           {
             let elapsed = now - last.time
@@ -146,7 +154,7 @@ final class ReadingHistory: @unchecked Sendable
         decimals: style.decimals,
         minimumSpan: style.minimumSpan,
         nonNegative: style.nonNegative,
-        points: Self.buckets(recent, start: start, convert: style.convert)
+        points: Self.buckets(recent, convert: style.convert)
       ))
     }
     var recordingSince: Int?
@@ -165,7 +173,8 @@ final class ReadingHistory: @unchecked Sendable
   }
 
   /// Averages samples into fixed buckets and returns [time, value] pairs in display units.
-  private static func buckets(_ samples: [Sample], start: TimeInterval, convert: (Double) -> Double) -> [[Double]]
+  /// The buckets follow the clock, not the request time, so the same samples always give the same points.
+  private static func buckets(_ samples: [Sample], convert: (Double) -> Double) -> [[Double]]
   {
     var points: [[Double]] = []
     var current = -1
@@ -182,7 +191,7 @@ final class ReadingHistory: @unchecked Sendable
     }
     for sample in samples
     {
-      let bucket = Int((sample.time - start) / bucketSeconds)
+      let bucket = Int((sample.time / bucketSeconds).rounded(.down))
       if bucket != current
       {
         flush()
@@ -221,18 +230,23 @@ final class ReadingHistory: @unchecked Sendable
     {
       return
     }
-    let cutoff = Date.now.timeIntervalSince1970 - Self.window
+    let now = Date.now.timeIntervalSince1970
+    let cutoff = now - Self.window
     var loaded: [Key: [Sample]] = [:]
     var dropped = 0
     for line in text.split(separator: "\n")
     {
       let fields = line.split(separator: "\t")
+      // Double() also reads "nan", "inf", and overflows such as "1e400", which a damaged file could hold.
+      // Those can't be converted to Int or encoded as JSON, and a future time would stop recording.
       guard fields.count == 4,
         let time = Double(fields[0]),
         let device = UUID(uuidString: String(fields[1])),
         let kind = Reading.Kind(historyKey: String(fields[2])),
         let value = Double(fields[3]),
-        time >= cutoff
+        value.isFinite,
+        time >= cutoff,
+        time <= now
       else
       {
         dropped += 1

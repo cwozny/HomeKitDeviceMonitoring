@@ -10,6 +10,8 @@ final class HTTPServer
     var path: String
     /// The Host header in lowercase, without its port or IPv6 brackets. Nil unless there is exactly one.
     var host: String?
+    /// The browser's Sec-Fetch-Site header in lowercase, for example "same-origin" or "cross-site". Nil when absent.
+    var fetchSite: String? = nil
   }
 
   struct Response
@@ -17,10 +19,19 @@ final class HTTPServer
     var status: String
     var contentType: String
     var body: Data
+    /// The methods the path accepts, sent as the Allow header of a 405 response.
+    var allow: String? = nil
 
     static func text(_ status: String, _ message: String) -> Response
     {
       Response(status: status, contentType: "text/plain; charset=utf-8", body: Data((message + "\n").utf8))
+    }
+
+    static func methodNotAllowed(allow: String) -> Response
+    {
+      var response = text("405 Method Not Allowed", "Method not allowed")
+      response.allow = allow
+      return response
     }
   }
 
@@ -32,9 +43,11 @@ final class HTTPServer
 
   private static let maximumHeaderSize = 32 * 1024
   private static let headerTerminator = Data("\r\n\r\n".utf8)
+  /// A client gets this long to receive the response. The history is large, and a phone's link can be slow.
+  private static let responseTimeout = DispatchTimeInterval.seconds(120)
 
   private let port: UInt16
-  /// A client gets this long to send its request and receive the response.
+  /// A client gets this long to send its request.
   private let connectionTimeout: DispatchTimeInterval
   private let handler: (Request) -> Response
   private let queue = DispatchQueue(label: "HomeSensors.HTTPServer")
@@ -117,14 +130,15 @@ final class HTTPServer
   {
     connection.start(queue: queue)
     // Closes connections that never finish a request, so they can't pile up and block the server.
-    queue.asyncAfter(deadline: .now() + connectionTimeout)
+    let deadline = DispatchWorkItem
     {
       connection.cancel()
     }
-    receive(on: connection, buffer: Data())
+    queue.asyncAfter(deadline: .now() + connectionTimeout, execute: deadline)
+    receive(on: connection, buffer: Data(), deadline: deadline)
   }
 
-  private func receive(on connection: NWConnection, buffer: Data)
+  private func receive(on connection: NWConnection, buffer: Data, deadline: DispatchWorkItem)
   {
     connection.receive(minimumIncompleteLength: 1, maximumLength: 8192)
     {
@@ -141,6 +155,8 @@ final class HTTPServer
       }
       if let end = buffer.range(of: Self.headerTerminator)
       {
+        // The request is complete. Sending the response has its own, longer time limit.
+        deadline.cancel()
         self.respond(to: buffer.subdata(in: buffer.startIndex..<end.lowerBound), on: connection)
       }
       else if isComplete || error != nil || buffer.count > Self.maximumHeaderSize
@@ -149,7 +165,7 @@ final class HTTPServer
       }
       else
       {
-        self.receive(on: connection, buffer: buffer)
+        self.receive(on: connection, buffer: buffer, deadline: deadline)
       }
     }
   }
@@ -159,23 +175,44 @@ final class HTTPServer
     let lines = String(decoding: header, as: UTF8.self).components(separatedBy: "\r\n")
     let parts = (lines.first ?? "").split(separator: " ")
     var response = Response.text("400 Bad Request", "Bad request")
+    var method = ""
     if parts.count >= 2
     {
+      method = String(parts[0])
       var path = String(parts[1])
       if let query = path.firstIndex(of: "?")
       {
         path = String(path[..<query])
       }
-      response = handler(Request(method: String(parts[0]), path: path, host: Self.host(in: lines.dropFirst())))
+      let headers = lines.dropFirst()
+      response = handler(Request(
+        method: method,
+        path: path,
+        host: Self.host(in: headers),
+        fetchSite: Self.values(of: "sec-fetch-site", in: headers).first?.lowercased()
+      ))
     }
-    let head = "HTTP/1.1 \(response.status)\r\n"
+    var head = "HTTP/1.1 \(response.status)\r\n"
       + "Content-Type: \(response.contentType)\r\n"
       + "Content-Length: \(response.body.count)\r\n"
       + "Cache-Control: no-store\r\n"
       + "X-Content-Type-Options: nosniff\r\n"
-      + "Connection: close\r\n\r\n"
+    if let allow = response.allow
+    {
+      head += "Allow: \(allow)\r\n"
+    }
+    head += "Connection: close\r\n\r\n"
     var data = Data(head.utf8)
-    data.append(response.body)
+    // A HEAD response has the headers that GET would have, without the body.
+    if method != "HEAD"
+    {
+      data.append(response.body)
+    }
+    // A client that stops reading can't keep the connection open forever either.
+    queue.asyncAfter(deadline: .now() + Self.responseTimeout)
+    {
+      connection.cancel()
+    }
     let finish: (NWError?) -> Void =
     {
       _ in
@@ -184,8 +221,8 @@ final class HTTPServer
     connection.send(content: data, completion: .contentProcessed(finish))
   }
 
-  /// The value of the request's only Host header, normalized for comparison.
-  static func host(in headerLines: some Sequence<String>) -> String?
+  /// The values of the header lines with this lowercase name, trimmed of spaces.
+  static func values(of name: String, in headerLines: some Sequence<String>) -> [String]
   {
     var values: [String] = []
     for line in headerLines
@@ -194,16 +231,23 @@ final class HTTPServer
       {
         continue
       }
-      if line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "host"
+      if line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == name
       {
-        values.append(String(line[line.index(after: colon)...]))
+        values.append(line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces))
       }
     }
-    guard values.count == 1 else
+    return values
+  }
+
+  /// The value of the request's only Host header, normalized for comparison.
+  static func host(in headerLines: some Sequence<String>) -> String?
+  {
+    let found = values(of: "host", in: headerLines)
+    guard found.count == 1 else
     {
       return nil
     }
-    var host = values[0].trimmingCharacters(in: .whitespaces).lowercased()
+    var host = found[0].lowercased()
     if host.hasPrefix("[")
     {
       // An IPv6 address, for example "[fe80::1]:8080".
