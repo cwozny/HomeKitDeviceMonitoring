@@ -94,6 +94,7 @@
         7A3C1E0F2B6D4A5900000008 /* Sources */,
         7A3C1E0F2B6D4A5900000003 /* Frameworks */,
         7A3C1E0F2B6D4A5900000009 /* Resources */,
+        7A3C1E0F2B6D4A590000001F /* Record Git Commit */,
       );
       buildRules = (
       );
@@ -187,6 +188,30 @@
       runOnlyForDeploymentPostprocessing = 0;
     };
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+    7A3C1E0F2B6D4A590000001F /* Record Git Commit */ = {
+      isa = PBXShellScriptBuildPhase;
+      alwaysOutOfDate = 1;
+      buildActionMask = 2147483647;
+      files = (
+      );
+      inputFileListPaths = (
+      );
+      inputPaths = (
+      );
+      name = "Record Git Commit";
+      outputFileListPaths = (
+      );
+      outputPaths = (
+        "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/BuildInfo.plist",
+      );
+      runOnlyForDeploymentPostprocessing = 0;
+      shellPath = /bin/sh;
+      shellScript = "# Records the Git commit this build comes from, so the web page can show which commit is running.\nset -eu\nCOMMIT=$(git -C \"$SRCROOT\" rev-parse HEAD 2>/dev/null || echo unknown)\nMODIFIED=false\nif [ \"$COMMIT\" != unknown ] && [ -n \"$(git --no-optional-locks -C \"$SRCROOT\" status --porcelain 2>/dev/null)\" ]\nthen\n  MODIFIED=true\nfi\nmkdir -p \"$(dirname \"$SCRIPT_OUTPUT_FILE_0\")\"\ncat > \"$SCRIPT_OUTPUT_FILE_0\" <<PLIST\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n<plist version=\"1.0\">\n<dict>\n  <key>Commit</key>\n  <string>$COMMIT</string>\n  <key>Modified</key>\n  <$MODIFIED/>\n</dict>\n</plist>\nPLIST\n";
+      showEnvVarsInLog = 0;
+    };
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
     7A3C1E0F2B6D4A5900000008 /* Sources */ = {

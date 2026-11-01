@@ -47,6 +47,7 @@ struct WebPayload: Encodable
   var isRefreshing: Bool
   var tiles: [Tile]
   var devices: [DeviceInfo]
+  var build = BuildInfo.current
 
   @MainActor
   init(store: HomeStore)

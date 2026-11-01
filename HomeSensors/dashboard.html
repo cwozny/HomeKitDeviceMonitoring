@@ -426,6 +426,13 @@
       text-align: center;
     }
 
+    .build
+    {
+      margin: 8px 4px 0;
+      color: var(--ink-2);
+      font-size: 12px;
+    }
+
     .history-note
     {
       margin: -8px 0 16px 4px;
@@ -659,6 +666,7 @@
       <span>Can't reach Home Sensors. Showing the last readings received.</span>
     </div>
     <div id="content"><p class="message">Loading Home data…</p></div>
+    <footer class="build" id="build"></footer>
   </main>
   <script>
     "use strict";
@@ -689,6 +697,7 @@
     const updated = document.getElementById("updated");
     const banner = document.getElementById("banner");
     const refreshButton = document.getElementById("refresh");
+    const buildFooter = document.getElementById("build");
 
     let latest = null;
     let failed = false;
@@ -783,6 +792,7 @@
       {
         updated.textContent = "Updated " + formatTime(latest.lastRefresh);
       }
+      renderBuild(latest.build);
       if (latest.phase !== "ready")
       {
         show([element("p", "message", MESSAGES[latest.phase] || MESSAGES.loading)]);
@@ -800,6 +810,23 @@
       {
         drawCharts();
       }
+    }
+
+    // Shows which build serves the page, so you can tell which commit is running.
+    function renderBuild(build)
+    {
+      if (!build)
+      {
+        buildFooter.textContent = "";
+        return;
+      }
+      let commit = "commit unknown";
+      if (/^[0-9a-f]{40}$/.test(build.commit))
+      {
+        commit = "commit " + build.commit.slice(0, 7) + (build.modified ? " with uncommitted changes" : "");
+      }
+      buildFooter.textContent = "Home Sensors " + build.version + " · " + commit;
+      buildFooter.title = build.commit;
     }
 
     // Swaps in new nodes but leaves ones already in place, so a chart keeps its focus and hover state.
