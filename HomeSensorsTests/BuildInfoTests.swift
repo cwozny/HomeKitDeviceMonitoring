@@ -9,12 +9,11 @@ struct BuildInfoTests
   private static let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
   private static let isGitCheckout = FileManager.default.fileExists(atPath: repository.appendingPathComponent(".git").path)
 
-  @Test("Reads the version, commit, and modified flag from the build record")
+  @Test("Reads the commit and modified flag from the build record")
   func readsRecord()
   {
     let commit = "0123456789abcdef0123456789abcdef01234567"
-    let info = BuildInfo(version: "1.0", record: ["Commit": commit, "Modified": true])
-    #expect(info.version == "1.0")
+    let info = BuildInfo(record: ["Commit": commit, "Modified": true])
     #expect(info.commit == commit)
     #expect(info.modified)
   }
@@ -22,8 +21,7 @@ struct BuildInfoTests
   @Test("Says unknown when the app has no build record")
   func noRecord()
   {
-    let info = BuildInfo(version: nil, record: nil)
-    #expect(info.version == "unknown")
+    let info = BuildInfo(record: nil)
     #expect(info.commit == "unknown")
     #expect(!info.modified)
   }
@@ -46,7 +44,6 @@ struct BuildInfoTests
     let page = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     let build = try #require(page["build"] as? [String: Any])
     #expect(build["commit"] as? String == BuildInfo.current.commit)
-    #expect(build["version"] as? String == BuildInfo.current.version)
     #expect(build["modified"] as? Bool == BuildInfo.current.modified)
   }
   #endif
