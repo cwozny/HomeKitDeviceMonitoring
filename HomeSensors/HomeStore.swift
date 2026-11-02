@@ -1,6 +1,7 @@
 import Foundation
 import HomeKit
 import Observation
+import os
 
 /// Reads accessories from Apple Home and publishes value snapshots for the dashboard.
 @MainActor
@@ -24,6 +25,15 @@ final class HomeStore: NSObject
   @ObservationIgnored private var hasReceivedHomes = false
   @ObservationIgnored private var isRefreshing = false
   @ObservationIgnored private var isDemo = false
+  /// When HomeKit last pushed a change, for the log.
+  @ObservationIgnored private var lastPush: Date?
+
+  /// Records HomeKit problems that the app works around without showing them. To read them on the host:
+  /// log show --predicate 'subsystem == "<bundle ID>"' --last 1d
+  private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HomeSensors", category: "HomeKit")
+  /// A longer pause between pushes is logged. The history records samples only when something changes,
+  /// so a pause of more than 45 minutes breaks the chart lines.
+  private static let longPause: TimeInterval = 10 * 60
 
   static func forLaunch() -> HomeStore
   {
@@ -76,22 +86,38 @@ final class HomeStore: NSObject
     var received = false
     for characteristic in HomeKitMapping.trackedCharacteristics(of: accessory)
     {
+      let item = "\(accessory.name) \(characteristic.localizedDescription)"
       let properties = characteristic.properties
       if properties.contains(HMCharacteristicPropertyReadable)
       {
+        let before = characteristic.value as? NSObject
         do
         {
           try await characteristic.readValue()
           received = true
+          if let before, let after = characteristic.value as? NSObject, !before.isEqual(after)
+          {
+            // A push carries every change, so either a push was lost or the device wasn't responding.
+            Self.logger.notice("A read changed \(item, privacy: .public) from \(before.description, privacy: .public) to \(after.description, privacy: .public)")
+          }
         }
         catch
         {
           // The value stays as it was. A later read or a pushed change updates it.
+          Self.logger.error("Couldn't read \(item, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
       }
       if properties.contains(HMCharacteristicPropertySupportsEventNotification) && !characteristic.isNotificationEnabled
       {
-        try? await characteristic.enableNotification(true)
+        do
+        {
+          try await characteristic.enableNotification(true)
+        }
+        catch
+        {
+          // Tried again the next time the app loads this device, for example when it reconnects.
+          Self.logger.error("Couldn't turn on notifications for \(item, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
       }
     }
     if received
@@ -156,6 +182,7 @@ extension HomeStore: @preconcurrency HMHomeManagerDelegate
 {
   func homeManagerDidUpdateHomes(_ manager: HMHomeManager)
   {
+    Self.logger.notice("HomeKit loaded the homes. Reading every device.")
     hasReceivedHomes = true
     attachDelegates()
     rebuild()
@@ -234,10 +261,15 @@ extension HomeStore: @preconcurrency HMAccessoryDelegate
     rebuild()
     if accessory.isReachable
     {
+      Self.logger.notice("\(accessory.name, privacy: .public) is responding again")
       Task
       {
         await load(accessory)
       }
+    }
+    else
+    {
+      Self.logger.notice("\(accessory.name, privacy: .public) stopped responding")
     }
   }
 
@@ -251,7 +283,13 @@ extension HomeStore: @preconcurrency HMAccessoryDelegate
 
   func accessory(_ accessory: HMAccessory, service: HMService, didUpdateValueFor characteristic: HMCharacteristic)
   {
-    lastUpdate = .now
+    let now = Date.now
+    if let lastPush, now.timeIntervalSince(lastPush) > Self.longPause
+    {
+      Self.logger.notice("No push came for \(Int(now.timeIntervalSince(lastPush) / 60)) minutes")
+    }
+    lastPush = now
+    lastUpdate = now
     rebuild()
   }
 }
