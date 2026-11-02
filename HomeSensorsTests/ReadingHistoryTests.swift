@@ -74,23 +74,75 @@ struct ReadingHistoryTests
     #expect(abs(temperature.points[0][1] - (average * 10).rounded() / 10) < 0.001)
   }
 
-  @Test("Drops readings older than 7 days and damaged lines when it loads the file")
-  func dropsOldAndDamagedLines() throws
+  @Test("Moves readings older than 7 days to the archive and drops damaged lines when it loads the file")
+  func archivesOldLinesWhenLoading() throws
+  {
+    let file = temporaryFile()
+    let archive = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: archive)
+    }
+    ReadingHistory(fileURL: file, archiveURL: archive).record([sensor(temperature: 20, humidity: 50)], at: start)
+    let old = "\(Int(Date.now.timeIntervalSince1970 - 8 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5"
+    let handle = try FileHandle(forWritingTo: file)
+    _ = try handle.seekToEnd()
+    try handle.write(contentsOf: Data((old + "\nnot a reading\n").utf8))
+    try handle.close()
+    _ = ReadingHistory(fileURL: file, archiveURL: archive)
+    let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    #expect(lines.count == 2)
+    let archived = try String(contentsOf: archive, encoding: .utf8).split(separator: "\n")
+    #expect(archived.map(String.init) == [old])
+  }
+
+  @Test("Keeps samples older than 7 days when it can't write the archive, so a later cleanup can try again")
+  func keepsSamplesWhenArchiveFails() throws
   {
     let file = temporaryFile()
     defer
     {
       try? FileManager.default.removeItem(at: file)
     }
-    ReadingHistory(fileURL: file).record([sensor(temperature: 20, humidity: 50)], at: start)
-    let old = "\(Int(Date.now.timeIntervalSince1970 - 8 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5\nnot a reading\n"
+    // In a folder that doesn't exist, so the archive can't be written.
+    let archive = FileManager.default.temporaryDirectory.appendingPathComponent("HomeSensorsTests-\(UUID().uuidString)/archive.tsv")
+    ReadingHistory(fileURL: file, archiveURL: archive).record([sensor(temperature: 20, humidity: 50)], at: start)
+    let old = "\(Int(Date.now.timeIntervalSince1970 - 8 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5\n"
     let handle = try FileHandle(forWritingTo: file)
     _ = try handle.seekToEnd()
     try handle.write(contentsOf: Data(old.utf8))
     try handle.close()
-    _ = ReadingHistory(fileURL: file)
+    // Loading keeps the old line, and so does the cleanup while the app runs.
+    let history = ReadingHistory(fileURL: file, archiveURL: archive)
+    history.record([sensor(temperature: 21, humidity: 51)], at: start + 8 * 86_400)
     let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
-    #expect(lines.count == 2)
+    #expect(lines.count == 5)
+    #expect(!FileManager.default.fileExists(atPath: archive.path))
+  }
+
+  @Test("Moves samples to the archive as they get older than 7 days while the app runs")
+  func archivesWhileRunning() throws
+  {
+    let file = temporaryFile()
+    let archive = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: archive)
+    }
+    let history = ReadingHistory(fileURL: file, archiveURL: archive)
+    history.record([sensor(temperature: 20, humidity: 50)], at: start)
+    // Eight days later, the first samples are outside the window and the 6-hourly cleanup is due.
+    history.record([sensor(temperature: 21, humidity: 51)], at: start + 8 * 86_400)
+    let archived = try String(contentsOf: archive, encoding: .utf8).split(separator: "\n")
+    let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    #expect(archived.count == 2)
+    #expect(kept.count == 2)
+    for line in archived
+    {
+      #expect(line.hasPrefix("\(Int(start.timeIntervalSince1970))\t"))
+    }
   }
 
   @Test("Saves the battery level and charts it last, up to 100 percent and without a low and high")
