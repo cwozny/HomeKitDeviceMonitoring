@@ -190,9 +190,10 @@ final class ReadingHistory: @unchecked Sendable
       series
     }
     let temperatureUnit = UnitTemperature(forLocale: .current, usage: .weather)
+    // By kind in chart order, so the page lists the kinds in its filter in that order. Then by device.
     let keys = snapshot.keys.sorted
     {
-      ($0.device.uuidString, $0.quantity.order) < ($1.device.uuidString, $1.quantity.order)
+      ($0.quantity.order, $0.device.uuidString) < ($1.quantity.order, $1.device.uuidString)
     }
     var list: [HistoryPayload.Series] = []
     var earliest: TimeInterval?

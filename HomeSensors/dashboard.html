@@ -398,6 +398,47 @@
       font-size: 13px;
     }
 
+    .history-filter
+    {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .history-filter-label
+    {
+      margin: 0 2px 0 4px;
+      color: var(--ink-2);
+      font-size: 13px;
+    }
+
+    .history-filter label
+    {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px 7px 10px;
+      border-radius: 999px;
+      background: var(--segment);
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .history-filter label:has(input:not(:checked))
+    {
+      color: var(--ink-2);
+    }
+
+    .history-filter input
+    {
+      margin: 0;
+      accent-color: var(--accent);
+    }
+
     .sensor
     {
       margin-bottom: 12px;
@@ -651,6 +692,9 @@
     let loading = false;
     let view = "room";
     const viewControl = buildViewControl();
+    // Kinds of chart that the viewer turned off in the History view. Not saved, so a reload shows every kind.
+    const hiddenKinds = new Set();
+    const historyFilter = buildHistoryFilter();
 
     let historyData = null;
     let historyFailed = false;
@@ -707,8 +751,7 @@
         }
         return;
       }
-      // When the app last got information from HomeKit. The app re-reads everything every 15 minutes,
-      // so an older time means it has stopped hearing from HomeKit.
+      // When the app last got information from HomeKit: a pushed change or a read.
       if (latest.lastUpdate)
       {
         updated.textContent = "Updated " + formatTime(latest.lastUpdate);
@@ -725,7 +768,7 @@
         return;
       }
       updateViewControl();
-      const body = view === "history" ? [historyView(latest.devices)] : renderGroups(latest.devices);
+      const body = view === "history" ? [historyFilter, historyView(latest.devices)] : renderGroups(latest.devices);
       show([renderTiles(latest.tiles), viewControl].concat(body));
       if (view === "history")
       {
@@ -977,6 +1020,7 @@
         liveCards = [];
         historyNode = buildHistory(devices);
         historyKey = key;
+        updateHistoryFilter();
         if (previous !== null)
         {
           keepViewState(previous, historyNode);
@@ -1043,6 +1087,119 @@
       return parts.join("\u001e");
     }
 
+    // Built once and kept, so a focused checkbox stays focused when new history arrives.
+    function buildHistoryFilter()
+    {
+      const filter = element("div", "history-filter");
+      const label = element("span", "history-filter-label", "Show");
+      label.id = "history-filter-label";
+      filter.setAttribute("role", "group");
+      filter.setAttribute("aria-labelledby", label.id);
+      filter.append(label);
+      filter.hidden = true;
+      return filter;
+    }
+
+    // One checkbox for each kind of chart in the history, in chart order. The app lists the series
+    // by kind in that order. Checkboxes that are already there stay in place.
+    function updateHistoryFilter()
+    {
+      const kinds = new Map();
+      for (const series of historyData ? historyData.series : [])
+      {
+        if (!kinds.has(series.kind))
+        {
+          kinds.set(series.kind, series.name);
+        }
+      }
+      const existing = new Map();
+      for (const option of historyFilter.querySelectorAll("label"))
+      {
+        existing.set(option.dataset.kind, option);
+      }
+      let position = historyFilter.firstElementChild.nextElementSibling;
+      for (const [kind, name] of kinds)
+      {
+        let option = existing.get(kind);
+        existing.delete(kind);
+        if (!option)
+        {
+          option = buildFilterOption(kind, name);
+        }
+        option.querySelector("input").checked = !hiddenKinds.has(kind);
+        if (option === position)
+        {
+          position = position.nextElementSibling;
+        }
+        else
+        {
+          historyFilter.insertBefore(option, position);
+        }
+      }
+      for (const option of existing.values())
+      {
+        option.remove();
+      }
+      historyFilter.hidden = kinds.size === 0;
+    }
+
+    function buildFilterOption(kind, name)
+    {
+      const option = element("label");
+      option.dataset.kind = kind;
+      const box = element("input");
+      box.type = "checkbox";
+      box.addEventListener("change", function ()
+      {
+        if (box.checked)
+        {
+          hiddenKinds.delete(kind);
+        }
+        else
+        {
+          hiddenKinds.add(kind);
+        }
+        if (historyNode !== null)
+        {
+          applyHistoryFilter(historyNode);
+          drawCharts();
+        }
+      });
+      option.append(box, document.createTextNode(name));
+      return option;
+    }
+
+    // Hides the charts of the kinds turned off, then each card and room left without a chart.
+    function applyHistoryFilter(root)
+    {
+      let shown = 0;
+      for (const section of root.querySelectorAll("section.group"))
+      {
+        let sectionShown = 0;
+        for (const card of section.querySelectorAll("article.sensor"))
+        {
+          let cardShown = 0;
+          for (const block of card.querySelectorAll(".chart-block"))
+          {
+            block.hidden = hiddenKinds.has(block.dataset.kind);
+            if (!block.hidden)
+            {
+              cardShown += 1;
+            }
+          }
+          card.hidden = cardShown === 0;
+          sectionShown += cardShown;
+        }
+        section.hidden = sectionShown === 0;
+        shown += sectionShown;
+      }
+      const empty = root.querySelector(".filter-empty");
+      if (empty)
+      {
+        empty.hidden = shown > 0;
+      }
+    }
+
     function buildHistory(devices)
     {
       const container = element("div", "history");
@@ -1095,6 +1252,8 @@
         }
         container.append(section);
       }
+      container.append(element("p", "message filter-empty", "Choose at least one kind of chart to show."));
+      applyHistoryFilter(container);
       return container;
     }
 
@@ -1124,6 +1283,7 @@
     function renderChartBlock(device, series, domain, period)
     {
       const block = element("div", "chart-block");
+      block.dataset.kind = series.kind;
       const head = element("div", "chart-head");
       const current = element("span", "chart-value", liveText(device, series));
       head.append(element("span", "chart-title", series.name), current);

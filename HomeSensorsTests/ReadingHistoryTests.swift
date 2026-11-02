@@ -114,6 +114,17 @@ struct ReadingHistoryTests
     #expect(temperature.showsLowHigh)
   }
 
+  @Test("Lists the series by kind in chart order, then by device, so the page's filter keeps that order")
+  func listsSeriesByKind() throws
+  {
+    // This device sorts first by its ID, so listing by device first would put its battery level first.
+    let door = makeDevice("Door sensor", id: try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000000")), battery: Battery(level: 90))
+    let history = ReadingHistory(fileURL: nil)
+    history.record([door, sensor(temperature: 20, humidity: 50, battery: 95)], at: start)
+    let payload = try decode(history.payload(at: start + 3_600))
+    #expect(payload.series.map(\.kind) == ["temperature", "humidity", "battery", "battery"])
+  }
+
   @Test("Gives the same points whenever the page asks, because buckets follow the clock")
   func bucketsFollowTheClock() throws
   {
