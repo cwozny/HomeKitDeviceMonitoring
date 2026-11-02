@@ -707,8 +707,7 @@
         }
         return;
       }
-      // When the app last got information from HomeKit. The app re-reads everything every 15 minutes,
-      // so an older time means it has stopped hearing from HomeKit.
+      // When the app last got information from HomeKit: a pushed change or a read.
       if (latest.lastUpdate)
       {
         updated.textContent = "Updated " + formatTime(latest.lastUpdate);
