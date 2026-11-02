@@ -8,7 +8,7 @@ import Observation
 @Observable
 final class WebDashboard
 {
-  static let defaultPort: UInt16 = 8080
+  private static let port: UInt16 = 8080
   /// How long to wait before listening again after the server fails, for example while another app holds the port.
   private static let retryDelay = Duration.seconds(30)
 
@@ -39,7 +39,7 @@ final class WebDashboard
     self.history = history
     publish()
     let router = WebRouter(content: content, history: history, advertisedHost: hostName)
-    server = HTTPServer(port: Self.configuredPort, handler: router.response(for:))
+    server = HTTPServer(port: Self.port, handler: router.response(for:))
     listen()
     // App Nap would throttle the app while its window is hidden; a server must answer promptly.
     activity = ProcessInfo.processInfo.beginActivity(
@@ -102,17 +102,6 @@ final class WebDashboard
       }
     )
     history?.record(store.devices)
-  }
-
-  /// Override with `defaults write <bundle identifier> WebServerPort <port>`.
-  private static var configuredPort: UInt16
-  {
-    let value = UserDefaults.standard.integer(forKey: "WebServerPort")
-    if value > 0 && value <= Int(UInt16.max)
-    {
-      return UInt16(value)
-    }
-    return defaultPort
   }
 
   private static var localHostName: String
@@ -181,9 +170,7 @@ struct WebRouter
     {
       return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or a Tailscale name.")
     }
-    // HEAD gets the answer GET would get; the server leaves out the body.
-    let method = request.method == "HEAD" ? "GET" : request.method
-    switch (method, request.path)
+    switch (request.method, request.path)
     {
     case ("GET", "/"), ("GET", "/index.html"):
       return HTTPServer.Response(status: "200 OK", contentType: "text/html; charset=utf-8", body: content.page)
@@ -192,7 +179,7 @@ struct WebRouter
     case ("GET", "/api/history"):
       return HTTPServer.Response(status: "200 OK", contentType: "application/json; charset=utf-8", body: history.payload())
     case (_, "/"), (_, "/index.html"), (_, "/api/devices"), (_, "/api/history"):
-      return .methodNotAllowed(allow: "GET, HEAD")
+      return .methodNotAllowed(allow: "GET")
     default:
       return .text("404 Not Found", "Not found")
     }

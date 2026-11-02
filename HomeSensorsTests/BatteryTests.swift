@@ -30,7 +30,7 @@ struct BatteryTests
   @Test("Sorts lowest first, then unknown levels, then devices without a battery")
   func sortOrder()
   {
-    let names = sampleDevices.sorted(using: DeviceSection.batteryOrder).map(\.name)
+    let names = sampleDevices.sorted(using: DeviceSnapshot.batteryOrder).map(\.name)
     #expect(names == ["Flagged low", "Low", "Full", "Unknown level", "No battery"])
   }
 

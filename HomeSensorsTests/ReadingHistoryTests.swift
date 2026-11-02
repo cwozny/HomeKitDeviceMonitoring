@@ -153,7 +153,7 @@ struct ReadingHistoryTests
       Reading(kind: .carbonDioxideDetected, value: 0),
       Reading(kind: .carbonDioxide, value: 712),
     ]
-    let info = WebPayload.DeviceInfo(device: makeDevice("Air monitor", readings: readings), showHome: false)
+    let info = WebPayload.DeviceInfo(device: makeDevice("Air monitor", readings: readings))
     let kinds = info.readings.map(\.kind)
     #expect(kinds == [nil, "co2"])
   }

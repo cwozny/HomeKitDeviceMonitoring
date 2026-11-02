@@ -113,7 +113,7 @@ extension DeviceSnapshot
       default:
         if let kind = Reading.Kind(characteristicType: type)
         {
-          readings.append(Reading(id: characteristic.uniqueIdentifier, kind: kind, value: number))
+          readings.append(Reading(kind: kind, value: number))
         }
       }
     }
@@ -127,52 +127,11 @@ extension DeviceSnapshot
     self.init(
       id: accessory.uniqueIdentifier,
       name: accessory.name,
-      home: home.name,
       room: (accessory.room ?? home.roomForEntireHome()).name,
-      manufacturer: accessory.manufacturer,
       model: accessory.model,
-      firmware: accessory.firmwareVersion,
-      symbol: Self.symbol(for: kinds, category: accessory.category.categoryType),
       isReachable: accessory.isReachable,
       battery: hasBattery ? Battery(level: level, isLowFlagged: isLow, charging: charging) : nil,
       readings: readings.sorted(using: KeyPathComparator(\Reading.kind))
     )
-  }
-
-  private static func symbol(for kinds: Set<Reading.Kind>, category: String) -> String
-  {
-    if kinds.contains(.leak)
-    {
-      return "drop.triangle"
-    }
-    if kinds.contains(.smoke) || kinds.contains(.carbonMonoxideDetected)
-    {
-      return "smoke"
-    }
-    if !kinds.isDisjoint(with: [.airQuality, .carbonDioxide, .pm25, .pm10, .voc])
-    {
-      return "aqi.medium"
-    }
-    if kinds.contains(.contact)
-    {
-      return "door.left.hand.closed"
-    }
-    if kinds.contains(.motion) || kinds.contains(.occupancy)
-    {
-      return "figure.walk.motion"
-    }
-    if kinds.contains(.temperature) || kinds.contains(.humidity)
-    {
-      return "thermometer.medium"
-    }
-    if kinds.contains(.light)
-    {
-      return "sun.max"
-    }
-    if category == HMAccessoryCategoryTypeProgrammableSwitch
-    {
-      return "button.programmable"
-    }
-    return "sensor"
   }
 }

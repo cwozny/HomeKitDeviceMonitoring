@@ -17,19 +17,13 @@ final class HomeStore: NSObject
 
   private(set) var phase = Phase.loading
   private(set) var devices: [DeviceSnapshot] = []
-  private(set) var homeCount = 0
-  private(set) var isRefreshing = false
-  private(set) var lastRefresh: Date?
   /// When the app last got information from HomeKit: a change that HomeKit sent, or a read.
   private(set) var lastUpdate: Date?
 
   @ObservationIgnored private var manager: HMHomeManager?
   @ObservationIgnored private var hasReceivedHomes = false
-  @ObservationIgnored private var periodicRefresh: Task<Void, Never>?
+  @ObservationIgnored private var isRefreshing = false
   @ObservationIgnored private var isDemo = false
-
-  /// Updates arrive as notifications; this periodic re-read is a safety net.
-  private static let refreshInterval = Duration.seconds(15 * 60)
 
   static func forLaunch() -> HomeStore
   {
@@ -51,39 +45,11 @@ final class HomeStore: NSObject
     let manager = HMHomeManager()
     manager.delegate = self
     self.manager = manager
-    periodicRefresh = Task
-    {
-      [weak self] in
-      while !Task.isCancelled
-      {
-        try? await Task.sleep(for: HomeStore.refreshInterval)
-        await self?.refresh()
-      }
-    }
-  }
-
-  /// Re-reads values unless a refresh finished within the last minute. The Refresh button and the app
-  /// coming to the front use this. See RefreshLimit.
-  func refreshIfStale()
-  {
-    if RefreshLimit.wait(after: lastRefresh) > 0
-    {
-      return
-    }
-    Task
-    {
-      await refresh()
-    }
   }
 
   /// Reads every tracked characteristic and turns on change notifications.
   func refresh() async
   {
-    if isDemo
-    {
-      lastRefresh = .now
-      return
-    }
     guard let manager, !isRefreshing else
     {
       return
@@ -102,7 +68,6 @@ final class HomeStore: NSObject
       }
     }
     isRefreshing = false
-    lastRefresh = .now
   }
 
   /// Reads one accessory's characteristics in sequence, which is gentler on sleepy Thread devices.
@@ -182,7 +147,6 @@ final class HomeStore: NSObject
         }
       }
     }
-    homeCount = homes.count
     devices = snapshots
     phase = homes.isEmpty ? .noHomes : .ready
   }
@@ -295,14 +259,12 @@ extension HomeStore: @preconcurrency HMAccessoryDelegate
 #if DEBUG
 extension HomeStore
 {
-  /// Sample data for previews and `-demo` launches. Never touches HomeKit.
+  /// Sample data for tests and `-demo` launches. Never touches HomeKit.
   static func demo() -> HomeStore
   {
     let store = HomeStore()
     store.isDemo = true
     store.devices = SampleData.devices
-    store.homeCount = 1
-    store.lastRefresh = .now
     store.lastUpdate = .now
     store.phase = .ready
     return store

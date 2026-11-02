@@ -173,17 +173,15 @@ final class HTTPServer
     let lines = String(decoding: header, as: UTF8.self).components(separatedBy: "\r\n")
     let parts = (lines.first ?? "").split(separator: " ")
     var response = Response.text("400 Bad Request", "Bad request")
-    var method = ""
     if parts.count >= 2
     {
-      method = String(parts[0])
       var path = String(parts[1])
       if let query = path.firstIndex(of: "?")
       {
         path = String(path[..<query])
       }
       let headers = lines.dropFirst()
-      response = handler(Request(method: method, path: path, host: Self.host(in: headers)))
+      response = handler(Request(method: String(parts[0]), path: path, host: Self.host(in: headers)))
     }
     var head = "HTTP/1.1 \(response.status)\r\n"
       + "Content-Type: \(response.contentType)\r\n"
@@ -196,11 +194,7 @@ final class HTTPServer
     }
     head += "Connection: close\r\n\r\n"
     var data = Data(head.utf8)
-    // A HEAD response has the headers that GET would have, without the body.
-    if method != "HEAD"
-    {
-      data.append(response.body)
-    }
+    data.append(response.body)
     // A client that stops reading can't keep the connection open forever either.
     queue.asyncAfter(deadline: .now() + Self.responseTimeout)
     {

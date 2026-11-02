@@ -68,14 +68,13 @@ struct HostCheckTests
     #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "other-mac.lan")).status == "403 Forbidden")
   }
 
-  @Test("Answers HEAD like GET and names the allowed methods when it refuses one")
-  func headAndAllowedMethods()
+  @Test("Names the allowed method when it refuses one")
+  func allowedMethod()
   {
     let router = makeRouter()
-    #expect(router.response(for: HTTPServer.Request(method: "HEAD", path: "/", host: "localhost")).status == "200 OK")
     let delete = router.response(for: HTTPServer.Request(method: "DELETE", path: "/api/devices", host: "localhost"))
     #expect(delete.status == "405 Method Not Allowed")
-    #expect(delete.allow == "GET, HEAD")
+    #expect(delete.allow == "GET")
   }
 
   private func makeRouter(advertisedHost: String? = nil) -> WebRouter

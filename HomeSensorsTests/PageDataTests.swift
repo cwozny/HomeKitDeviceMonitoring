@@ -13,8 +13,6 @@ struct PageDataTests
     let data = WebPayload(store: HomeStore.demo()).encoded()
     let page = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
     #expect(page["lastUpdate"] is String)
-    #expect(page["lastRefresh"] == nil)
-    #expect(page["isRefreshing"] == nil)
   }
 }
 #endif

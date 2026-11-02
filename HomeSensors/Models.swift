@@ -48,18 +48,9 @@ struct Battery: Hashable
     }
     return .normal
   }
-
-  var fraction: Double?
-  {
-    guard let level else
-    {
-      return nil
-    }
-    return Double(min(max(level, 0), 100)) / 100
-  }
 }
 
-struct Reading: Identifiable, Hashable
+struct Reading: Hashable
 {
   /// Readings within a row appear in declaration order.
   enum Kind: Int, Comparable
@@ -95,22 +86,17 @@ struct Reading: Identifiable, Hashable
     }
   }
 
-  var id = UUID()
   var kind: Kind
   /// Raw HomeKit value; nil until the accessory has reported one.
   var value: Double?
 }
 
-struct DeviceSnapshot: Identifiable, Hashable
+struct DeviceSnapshot: Hashable
 {
   var id: UUID
   var name: String
-  var home: String
   var room: String
-  var manufacturer: String?
   var model: String?
-  var firmware: String?
-  var symbol: String
   var isReachable: Bool
   var battery: Battery?
   var readings: [Reading]
@@ -138,6 +124,9 @@ struct DeviceSnapshot: Identifiable, Hashable
     }
     return battery.isLowFlagged == true ? -1 : 101
   }
+
+  /// Lowest battery first, then by name.
+  static let batteryOrder = [KeyPathComparator(\DeviceSnapshot.batterySortKey), KeyPathComparator(\DeviceSnapshot.name, comparator: .localizedStandard)]
 }
 
 struct Summary
@@ -154,7 +143,7 @@ struct Summary
   init(devices: [DeviceSnapshot])
   {
     deviceCount = devices.count
-    for device in devices.sorted(using: DeviceSection.batteryOrder)
+    for device in devices.sorted(using: DeviceSnapshot.batteryOrder)
     {
       if device.battery != nil
       {
@@ -176,73 +165,6 @@ struct Summary
       {
         lowest = device
       }
-    }
-  }
-}
-
-/// Refreshes that people ask for run at most once a minute: the app's Refresh button and the app coming to
-/// the front. HomeKit's own updates still load right away.
-enum RefreshLimit
-{
-  static let interval: TimeInterval = 60
-
-  /// Seconds until a requested refresh can run. Zero when it can run now.
-  static func wait(after lastRefresh: Date?, now: Date = .now) -> TimeInterval
-  {
-    guard let lastRefresh else
-    {
-      return 0
-    }
-    let elapsed = now.timeIntervalSince(lastRefresh)
-    // A last refresh in the future means the clock went back. Don't block refreshes until it catches up.
-    if elapsed < 0
-    {
-      return 0
-    }
-    return max(0, interval - elapsed)
-  }
-}
-
-enum Grouping: String, CaseIterable, Identifiable
-{
-  case room = "Room"
-  case battery = "Battery level"
-
-  var id: Self
-  {
-    self
-  }
-}
-
-struct DeviceSection: Identifiable
-{
-  var id: String
-  var title: String
-  var devices: [DeviceSnapshot]
-
-  static let nameOrder = KeyPathComparator(\DeviceSnapshot.name, comparator: .localizedStandard)
-  static let batteryOrder = [KeyPathComparator(\DeviceSnapshot.batterySortKey), nameOrder]
-
-  static func make(from devices: [DeviceSnapshot], grouping: Grouping, showHome: Bool) -> [DeviceSection]
-  {
-    switch grouping
-    {
-    case .battery:
-      return [DeviceSection(id: "all", title: "All devices, lowest battery first", devices: devices.sorted(using: batteryOrder))]
-    case .room:
-      var groups: [String: [DeviceSnapshot]] = [:]
-      for device in devices
-      {
-        groups[device.home + "\u{1F}" + device.room, default: []].append(device)
-      }
-      var sections: [DeviceSection] = []
-      for (key, members) in groups
-      {
-        let first = members[0]
-        let title = showHome ? "\(first.home) · \(first.room)" : first.room
-        sections.append(DeviceSection(id: key, title: title, devices: members.sorted(using: nameOrder)))
-      }
-      return sections.sorted(using: KeyPathComparator(\DeviceSection.title, comparator: .localizedStandard))
     }
   }
 }

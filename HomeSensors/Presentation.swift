@@ -1,52 +1,6 @@
-import SwiftUI
+import Foundation
 
-extension Color
-{
-  init(hex: UInt32)
-  {
-    self.init(
-      red: Double((hex >> 16) & 0xFF) / 255,
-      green: Double((hex >> 8) & 0xFF) / 255,
-      blue: Double(hex & 0xFF) / 255
-    )
-  }
-}
-
-extension Severity
-{
-  /// Fixed status palette. Reserved for status and always paired with an icon and a label.
-  var color: Color
-  {
-    switch self
-    {
-    case .normal:
-      Color.accentColor
-    case .warning:
-      Color(hex: 0xFAB219)
-    case .serious:
-      Color(hex: 0xEC835A)
-    case .critical:
-      Color(hex: 0xD03B3B)
-    }
-  }
-
-  var symbol: String
-  {
-    switch self
-    {
-    case .normal:
-      "checkmark.circle.fill"
-    case .warning:
-      "exclamationmark.triangle.fill"
-    case .serious:
-      "exclamationmark.circle.fill"
-    case .critical:
-      "exclamationmark.octagon.fill"
-    }
-  }
-}
-
-/// One summary tile. Shared by the app and the web page so both say the same thing.
+/// One summary tile on the web page.
 struct SummaryTile
 {
   var label: String
@@ -250,41 +204,6 @@ extension Reading
       return value >= 4 ? .warning : nil
     default:
       return nil
-    }
-  }
-
-  var symbol: String
-  {
-    switch kind
-    {
-    case .temperature:
-      "thermometer.medium"
-    case .humidity:
-      "humidity"
-    case .motion:
-      "figure.walk.motion"
-    case .occupancy:
-      "person.fill"
-    case .contact:
-      isOn ? "door.left.hand.open" : "door.left.hand.closed"
-    case .leak:
-      "drop.triangle"
-    case .smoke:
-      "smoke"
-    case .carbonMonoxideDetected, .carbonMonoxide:
-      "carbon.monoxide.cloud"
-    case .carbonDioxideDetected, .carbonDioxide:
-      "carbon.dioxide.cloud"
-    case .airQuality:
-      "aqi.medium"
-    case .pm25, .pm10, .voc:
-      "aqi.low"
-    case .light:
-      "sun.max"
-    case .fault:
-      "wrench.and.screwdriver"
-    case .tampered:
-      "hand.raised"
     }
   }
 

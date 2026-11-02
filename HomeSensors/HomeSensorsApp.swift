@@ -33,14 +33,10 @@ struct HomeSensorsApp: App
       }
       else
       {
-        DashboardView()
+        StatusView()
           .environment(store)
           .environment(web)
-          #if targetEnvironment(macCatalyst)
-          .frame(minWidth: 760, minHeight: 480)
-          #endif
       }
     }
-    .windowResizability(.contentMinSize)
   }
 }

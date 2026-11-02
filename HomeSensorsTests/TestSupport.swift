@@ -15,12 +15,8 @@ func makeDevice(
   DeviceSnapshot(
     id: id,
     name: name,
-    home: "Home",
     room: room,
-    manufacturer: nil,
     model: nil,
-    firmware: nil,
-    symbol: "sensor",
     isReachable: reachable,
     battery: battery,
     readings: readings

@@ -1,0 +1,55 @@
+import SwiftUI
+
+/// The app's window. The dashboard itself is the web page, so the window shows only the page's address,
+/// when data last arrived, and HomeKit problems.
+struct StatusView: View
+{
+  @Environment(HomeStore.self) private var store
+  @Environment(WebDashboard.self) private var web
+
+  var body: some View
+  {
+    VStack(spacing: 16)
+    {
+      switch store.phase
+      {
+      case .loading:
+        ProgressView("Loading Home data…")
+      case .notAuthorized:
+        ContentUnavailableView(
+          "No access to Home data",
+          systemImage: "house.slash",
+          description: Text("Allow Home Sensors under Privacy & Security › HomeKit in Settings.")
+        )
+      case .noHomes:
+        ContentUnavailableView(
+          "No homes",
+          systemImage: "house",
+          description: Text("Set up a home in the Home app first.")
+        )
+      case .ready:
+        if let lastUpdate = store.lastUpdate
+        {
+          Text("Updated \(lastUpdate, format: .dateTime.hour().minute())")
+        }
+      }
+      webLabel
+    }
+    .padding(20)
+  }
+
+  @ViewBuilder
+  private var webLabel: some View
+  {
+    if let address = web.address, let url = URL(string: address)
+    {
+      Link("Web: \(address)", destination: url)
+        .buttonStyle(.borderless)
+        .help("Phones on the same network can open this address.")
+    }
+    else if let failure = web.failure
+    {
+      Text(failure)
+    }
+  }
+}

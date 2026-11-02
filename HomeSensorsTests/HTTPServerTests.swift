@@ -42,25 +42,22 @@ struct HTTPServerTests
     #expect(result.reply.hasPrefix("HTTP/1.1 400 Bad Request\r\n"))
   }
 
-  @Test("Answers HEAD with the headers only, and sends Allow with a 405")
-  func answersHeadWithoutBody() async throws
+  @Test("Sends the Allow header with a 405")
+  func sendsAllowHeader() async throws
   {
     let server = HTTPServer(port: 0)
     {
-      request in
-      request.method == "HEAD" ? .text("200 OK", "OK") : .methodNotAllowed(allow: "GET, HEAD")
+      _ in
+      .methodNotAllowed(allow: "GET")
     }
     defer
     {
       server.stop()
     }
     let port = try await startListening(server)
-    let head = try await exchange(port: port, request: "HEAD / HTTP/1.1\r\nHost: localhost\r\n\r\n")
-    #expect(head.reply.hasPrefix("HTTP/1.1 200 OK\r\n"))
-    #expect(head.reply.contains("Content-Length: 3\r\n"))
-    #expect(head.reply.hasSuffix("\r\n\r\n"))
-    let delete = try await exchange(port: port, request: "DELETE / HTTP/1.1\r\nHost: localhost\r\n\r\n")
-    #expect(delete.reply.contains("Allow: GET, HEAD\r\n"))
+    let result = try await exchange(port: port, request: "DELETE / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+    #expect(result.reply.hasPrefix("HTTP/1.1 405 Method Not Allowed\r\n"))
+    #expect(result.reply.contains("Allow: GET\r\n"))
   }
 
   @Test("Closes a connection that sends nothing when the time limit ends")

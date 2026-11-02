@@ -656,7 +656,7 @@
     let latest = null;
     let failed = false;
     let loading = false;
-    let view = readView();
+    let view = "room";
     const viewControl = buildViewControl();
 
     let historyData = null;
@@ -669,31 +669,6 @@
     let liveCards = [];
     // The chart that had focus when new history replaced the charts, to focus again once they're drawn.
     let refocus = null;
-
-    function readView()
-    {
-      try
-      {
-        const saved = localStorage.getItem("grouping");
-        return saved === "battery" || saved === "history" ? saved : "room";
-      }
-      catch (error)
-      {
-        return "room";
-      }
-    }
-
-    function writeView(value)
-    {
-      try
-      {
-        localStorage.setItem("grouping", value);
-      }
-      catch (error)
-      {
-        // Private browsing can block storage; the choice just won't be remembered.
-      }
-    }
 
     function element(tag, className, text)
     {
@@ -858,7 +833,6 @@
     function selectView(value)
     {
       view = value;
-      writeView(value);
       loadHistoryIfDue();
       render();
     }
@@ -881,11 +855,11 @@
       const sections = new Map();
       for (const device of devices)
       {
-        if (!sections.has(device.section))
+        if (!sections.has(device.room))
         {
-          sections.set(device.section, []);
+          sections.set(device.room, []);
         }
-        sections.get(device.section).push(device);
+        sections.get(device.room).push(device);
       }
       const titles = Array.from(sections.keys()).sort(compareText);
       const groups = [];
@@ -1071,7 +1045,7 @@
       const parts = [historyData ? String(historyData.now) : historyFailed ? "failed" : "loading"];
       for (const device of devices)
       {
-        parts.push([device.id, device.name, device.section, device.model].join("\u001f"));
+        parts.push([device.id, device.name, device.room, device.model].join("\u001f"));
       }
       return parts.join("\u001e");
     }
@@ -1112,11 +1086,11 @@
       const sections = new Map();
       for (const device of charted)
       {
-        if (!sections.has(device.section))
+        if (!sections.has(device.room))
         {
-          sections.set(device.section, []);
+          sections.set(device.room, []);
         }
-        sections.get(device.section).push(device);
+        sections.get(device.room).push(device);
       }
       for (const title of Array.from(sections.keys()).sort(compareText))
       {

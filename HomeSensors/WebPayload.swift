@@ -1,6 +1,6 @@
 import Foundation
 
-/// The JSON the web page renders. Text is formatted here so the page matches the app.
+/// The JSON the web page renders, with the text already formatted.
 struct WebPayload: Encodable
 {
   struct Tile: Encodable
@@ -35,7 +35,6 @@ struct WebPayload: Encodable
   {
     var id: String
     var name: String
-    var section: String
     var room: String
     var model: String?
     var reachable: Bool
@@ -62,11 +61,10 @@ struct WebPayload: Encodable
       tiles.append(Tile(label: tile.label, value: tile.value, detail: tile.detail, status: tile.status.map(String.init(describing:))))
     }
     self.tiles = tiles
-    let showHome = store.homeCount > 1
     var devices: [DeviceInfo] = []
     for device in store.devices
     {
-      devices.append(DeviceInfo(device: device, showHome: showHome))
+      devices.append(DeviceInfo(device: device))
     }
     self.devices = devices
   }
@@ -81,7 +79,7 @@ struct WebPayload: Encodable
 
 extension WebPayload.DeviceInfo
 {
-  init(device: DeviceSnapshot, showHome: Bool)
+  init(device: DeviceSnapshot)
   {
     var battery: WebPayload.BatteryInfo?
     if let power = device.battery
@@ -97,7 +95,7 @@ extension WebPayload.DeviceInfo
     var readings: [WebPayload.ReadingInfo] = []
     for reading in device.readings where reading.isVisible
     {
-      // The app shows humidity next to an icon; the page has no icons, so it says "RH".
+      // The page has no reading icons, so humidity says "RH".
       let text = reading.kind == .humidity ? "\(reading.text) RH" : reading.text
       readings.append(WebPayload.ReadingInfo(
         name: reading.name,
@@ -111,7 +109,6 @@ extension WebPayload.DeviceInfo
     self.init(
       id: device.id.uuidString,
       name: device.name,
-      section: showHome ? "\(device.home) · \(device.room)" : device.room,
       room: device.room,
       model: device.model,
       reachable: device.isReachable,
