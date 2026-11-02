@@ -1,6 +1,6 @@
 import Foundation
 
-/// Records numeric sensor readings so the web page can chart the last 7 days.
+/// Records numeric sensor readings and battery levels so the web page can chart the last 7 days.
 /// HomeKit keeps no history, so the record starts when the app first runs.
 /// Recording happens on the main actor; the web server reads payloads on its own queue.
 final class ReadingHistory: @unchecked Sendable
@@ -11,10 +11,57 @@ final class ReadingHistory: @unchecked Sendable
     var value: Double
   }
 
+  /// What one series records: a charted reading, or the battery level.
+  enum Quantity: Hashable
+  {
+    case reading(Reading.Kind)
+    case battery
+
+    /// Stable name in the history file and the page data. Nil for readings the History view doesn't chart.
+    var historyKey: String?
+    {
+      switch self
+      {
+      case .reading(let kind):
+        kind.historyKey
+      case .battery:
+        "battery"
+      }
+    }
+
+    init?(historyKey: String)
+    {
+      if historyKey == "battery"
+      {
+        self = .battery
+      }
+      else if let kind = Reading.Kind(historyKey: historyKey)
+      {
+        self = .reading(kind)
+      }
+      else
+      {
+        return nil
+      }
+    }
+
+    /// Each device's charts come in this order: its readings, then its battery level.
+    var order: Int
+    {
+      switch self
+      {
+      case .reading(let kind):
+        kind.rawValue
+      case .battery:
+        Int.max
+      }
+    }
+  }
+
   struct Key: Hashable
   {
     var device: UUID
-    var kind: Reading.Kind
+    var quantity: Quantity
   }
 
   static let window: TimeInterval = 7 * 24 * 60 * 60
@@ -69,7 +116,7 @@ final class ReadingHistory: @unchecked Sendable
     return folder.appendingPathComponent("history.tsv")
   }
 
-  /// Adds the charted readings of devices that are responding. Call whenever the devices change.
+  /// Adds the charted readings and battery levels of devices that are responding. Call whenever the devices change.
   func record(_ devices: [DeviceSnapshot], at date: Date = .now)
   {
     if isFrozen
@@ -82,13 +129,9 @@ final class ReadingHistory: @unchecked Sendable
     {
       for device in devices where device.isReachable
       {
-        for reading in device.readings where reading.kind.historyKey != nil
+        for (quantity, value) in Self.recordedValues(of: device)
         {
-          guard let value = reading.value, value.isFinite else
-          {
-            continue
-          }
-          let key = Key(device: device.id, kind: reading.kind)
+          let key = Key(device: device.id, quantity: quantity)
           if let last = series[key]?.last, last.time > now
           {
             // The clock went back. Samples from the future would stop recording until it caught up.
@@ -119,6 +162,24 @@ final class ReadingHistory: @unchecked Sendable
     }
   }
 
+  /// The charted readings and the battery level of one device.
+  private static func recordedValues(of device: DeviceSnapshot) -> [(Quantity, Double)]
+  {
+    var values: [(Quantity, Double)] = []
+    for reading in device.readings where reading.kind.historyKey != nil
+    {
+      if let value = reading.value, value.isFinite
+      {
+        values.append((.reading(reading.kind), value))
+      }
+    }
+    if let level = device.battery?.level
+    {
+      values.append((.battery, Double(level)))
+    }
+    return values
+  }
+
   /// The JSON behind the History view: each series for the last 7 days, averaged into 10-minute buckets.
   func payload(at date: Date = .now) -> Data
   {
@@ -131,7 +192,7 @@ final class ReadingHistory: @unchecked Sendable
     let temperatureUnit = UnitTemperature(forLocale: .current, usage: .weather)
     let keys = snapshot.keys.sorted
     {
-      ($0.device.uuidString, $0.kind.rawValue) < ($1.device.uuidString, $1.kind.rawValue)
+      ($0.device.uuidString, $0.quantity.order) < ($1.device.uuidString, $1.quantity.order)
     }
     var list: [HistoryPayload.Series] = []
     var earliest: TimeInterval?
@@ -141,7 +202,7 @@ final class ReadingHistory: @unchecked Sendable
       {
         $0.time >= start
       }
-      guard let first = recent.first, let name = key.kind.historyKey, let style = ChartStyle(kind: key.kind, temperatureUnit: temperatureUnit) else
+      guard let first = recent.first, let name = key.quantity.historyKey, let style = ChartStyle(quantity: key.quantity, temperatureUnit: temperatureUnit) else
       {
         continue
       }
@@ -154,6 +215,8 @@ final class ReadingHistory: @unchecked Sendable
         decimals: style.decimals,
         minimumSpan: style.minimumSpan,
         nonNegative: style.nonNegative,
+        maximum: style.maximum,
+        showsLowHigh: style.showsLowHigh,
         points: Self.buckets(recent, convert: style.convert)
       ))
     }
@@ -216,7 +279,7 @@ final class ReadingHistory: @unchecked Sendable
     var text = ""
     for (key, sample) in entries
     {
-      if let kind = key.kind.historyKey
+      if let kind = key.quantity.historyKey
       {
         text += "\(Int(sample.time))\t\(key.device.uuidString)\t\(kind)\t\(sample.value)\n"
       }
@@ -242,7 +305,7 @@ final class ReadingHistory: @unchecked Sendable
       guard fields.count == 4,
         let time = Double(fields[0]),
         let device = UUID(uuidString: String(fields[1])),
-        let kind = Reading.Kind(historyKey: String(fields[2])),
+        let quantity = Quantity(historyKey: String(fields[2])),
         let value = Double(fields[3]),
         value.isFinite,
         time >= cutoff,
@@ -252,7 +315,7 @@ final class ReadingHistory: @unchecked Sendable
         dropped += 1
         continue
       }
-      loaded[Key(device: device, kind: kind), default: []].append(Sample(time: time, value: value))
+      loaded[Key(device: device, quantity: quantity), default: []].append(Sample(time: time, value: value))
     }
     for key in loaded.keys
     {
@@ -357,6 +420,10 @@ struct HistoryPayload: Encodable
     /// The smallest value range a chart shows, so sensor noise doesn't look like a swing.
     var minimumSpan: Double
     var nonNegative: Bool
+    /// The highest value a chart shows. Nil when there's no limit.
+    var maximum: Double?
+    /// Whether the page shows the low and high, above the chart and in a daily table.
+    var showsLowHigh: Bool
     /// [seconds since 1970, value in `unit`] pairs, oldest first.
     var points: [[Double]]
   }
@@ -369,7 +436,7 @@ struct HistoryPayload: Encodable
   var series: [Series]
 }
 
-/// How the History view labels and scales one kind of reading.
+/// How the History view labels and scales one series.
 struct ChartStyle
 {
   var name: String
@@ -377,8 +444,32 @@ struct ChartStyle
   var decimals: Int
   var minimumSpan: Double
   var nonNegative = true
+  var maximum: Double?
+  var showsLowHigh = true
   /// Set for temperatures, which HomeKit reports in Celsius.
   var temperatureUnit: UnitTemperature?
+
+  init?(quantity: ReadingHistory.Quantity, temperatureUnit: UnitTemperature)
+  {
+    switch quantity
+    {
+    case .reading(let kind):
+      self.init(kind: kind, temperatureUnit: temperatureUnit)
+    case .battery:
+      // A battery only runs down, so its low and high would only repeat the chart.
+      self.init(name: "Battery", unit: "%", decimals: 0, minimumSpan: 10, maximum: 100, showsLowHigh: false)
+    }
+  }
+
+  private init(name: String, unit: String, decimals: Int, minimumSpan: Double, maximum: Double, showsLowHigh: Bool)
+  {
+    self.name = name
+    self.unit = unit
+    self.decimals = decimals
+    self.minimumSpan = minimumSpan
+    self.maximum = maximum
+    self.showsLowHigh = showsLowHigh
+  }
 
   init?(kind: Reading.Kind, temperatureUnit: UnitTemperature)
   {
@@ -489,23 +580,40 @@ extension ReadingHistory
     {
       // A device that stopped responding has no samples for its last five hours.
       let end = device.isReachable ? now : now - 5 * 3_600
+      func samples(_ value: (TimeInterval) -> Double) -> [Sample]
+      {
+        var result: [Sample] = []
+        var time = start
+        while time <= end
+        {
+          if !gap.contains(time)
+          {
+            result.append(Sample(time: time, value: value(time)))
+          }
+          time += 5 * 60
+        }
+        return result
+      }
       for reading in device.readings
       {
         guard let base = reading.value, reading.kind.historyKey != nil else
         {
           continue
         }
-        var samples: [Sample] = []
-        var time = start
-        while time <= end
+        seeded[Key(device: device.id, quantity: .reading(reading.kind))] = samples
         {
-          if !gap.contains(time)
-          {
-            samples.append(Sample(time: time, value: demoValue(reading.kind, base: base, time: time, seed: Double(index))))
-          }
-          time += 5 * 60
+          time in
+          demoValue(reading.kind, base: base, time: time, seed: Double(index))
         }
-        seeded[Key(device: device.id, kind: reading.kind)] = samples
+      }
+      if let level = device.battery?.level
+      {
+        // Three percent over the week, in whole-percent steps.
+        seeded[Key(device: device.id, quantity: .battery)] = samples
+        {
+          time in
+          min(100, (Double(level) + 3 * (now - time) / window).rounded())
+        }
       }
     }
     history.lock.withLock
