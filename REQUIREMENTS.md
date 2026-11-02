@@ -11,7 +11,7 @@ Each requirement uses "shall". A sentence without "shall" gives a definition, a 
 | Term | Meaning |
 |---|---|
 | Device | A sensor or other smart-home device in the home. |
-| Reading | One value that a device reports, for example a temperature. |
+| Reading | One value that a device reports, for example a temperature. The battery level is not a reading. |
 | Web page | The dashboard as a web browser shows it. |
 
 ## Device data
@@ -33,7 +33,7 @@ Each requirement uses "shall". A sentence without "shall" gives a definition, a 
 
 ## History
 
-- **HIST-1** The web page shall have a separate view with a chart for each numeric reading of each device, for the last 7 days.
+- **HIST-1** The web page shall have a separate view with a chart of the battery level and of each numeric reading of each device, for the last 7 days.
 - **HIST-2** The same view shall show the daily low and high of each numeric reading of each device, for the last 7 days.
 - **HIST-3** If the software stops and starts again, the history shall stay.
 

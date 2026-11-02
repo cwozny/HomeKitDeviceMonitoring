@@ -1073,7 +1073,7 @@
       });
       if (charted.length === 0 || typeof historyData.recordingSince !== "number")
       {
-        container.append(element("p", "message", "Nothing recorded yet. Charts appear here as sensors report temperature, humidity, or light."));
+        container.append(element("p", "message", "Nothing recorded yet. Charts appear here as devices report temperature, humidity, light, or battery level."));
         return container;
       }
       const since = Math.max(historyData.start, historyData.recordingSince);
@@ -1147,7 +1147,8 @@
       figure.dataset.key = key;
       figure.tabIndex = 0;
       figure.setAttribute("role", "group");
-      figure.setAttribute("aria-label", device.name + " " + series.name.toLowerCase() + " " + period + ": low " + withUnit(low, series) + ", high " + withUnit(high, series) + ". Use the arrow keys to read values.");
+      const range = series.showsLowHigh ? ": low " + withUnit(low, series) + ", high " + withUnit(high, series) : "";
+      figure.setAttribute("aria-label", device.name + " " + series.name.toLowerCase() + " " + period + range + ". Use the arrow keys to read values.");
       const tip = element("div", "chart-tip");
       tip.hidden = true;
       tip.setAttribute("aria-live", "polite");
@@ -1169,7 +1170,16 @@
       {
         stepPoint(figure, event);
       });
-      block.append(head, element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)), figure, renderTable(series, key));
+      block.append(head);
+      if (series.showsLowHigh)
+      {
+        block.append(element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)));
+      }
+      block.append(figure);
+      if (series.showsLowHigh)
+      {
+        block.append(renderTable(series, key));
+      }
       return block;
     }
 
@@ -1177,6 +1187,10 @@
     // a carbon dioxide sensor has both a "detected" reading and a level reading.
     function liveText(device, series)
     {
+      if (series.kind === "battery" && device.battery && typeof device.battery.level === "number")
+      {
+        return device.battery.text;
+      }
       for (const reading of device.readings)
       {
         if (reading.kind === series.kind)
@@ -1307,6 +1321,11 @@
       {
         high -= low;
         low = 0;
+      }
+      if (typeof series.maximum === "number" && high > series.maximum)
+      {
+        low -= high - series.maximum;
+        high = series.maximum;
       }
       const scale = niceScale(low, high);
       const decimals = stepDecimals(scale.step);

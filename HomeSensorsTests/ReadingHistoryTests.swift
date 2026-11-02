@@ -93,6 +93,27 @@ struct ReadingHistoryTests
     #expect(lines.count == 2)
   }
 
+  @Test("Saves the battery level and charts it last, up to 100 percent and without a low and high")
+  func chartsBatteryLevel() throws
+  {
+    let file = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+    }
+    ReadingHistory(fileURL: file).record([sensor(temperature: 20, humidity: 50, battery: 95)], at: start)
+    let payload = try decode(ReadingHistory(fileURL: file).payload(at: start + 3_600))
+    #expect(payload.series.map(\.kind) == ["temperature", "humidity", "battery"])
+    let battery = try #require(payload.series.last)
+    #expect(battery.unit == "%")
+    #expect(battery.maximum == 100)
+    #expect(!battery.showsLowHigh)
+    #expect(battery.points == [[start.timeIntervalSince1970, 95]])
+    let temperature = try #require(payload.series.first)
+    #expect(temperature.maximum == nil)
+    #expect(temperature.showsLowHigh)
+  }
+
   @Test("Gives the same points whenever the page asks, because buckets follow the clock")
   func bucketsFollowTheClock() throws
   {
@@ -158,14 +179,19 @@ struct ReadingHistoryTests
     #expect(kinds == [nil, "co2"])
   }
 
-  private func sensor(temperature: Double, humidity: Double, reachable: Bool = true) -> DeviceSnapshot
+  private func sensor(temperature: Double, humidity: Double, battery: Int? = nil, reachable: Bool = true) -> DeviceSnapshot
   {
     let readings = [
       Reading(kind: .temperature, value: temperature),
       Reading(kind: .humidity, value: humidity),
       Reading(kind: .contact, value: 1),
     ]
-    return makeDevice("Climate sensor", id: deviceID, readings: readings, reachable: reachable)
+    var power: Battery?
+    if let battery
+    {
+      power = Battery(level: battery)
+    }
+    return makeDevice("Climate sensor", id: deviceID, battery: power, readings: readings, reachable: reachable)
   }
 
   private func temporaryFile() -> URL
@@ -186,6 +212,8 @@ private struct DecodedPayload: Decodable
   {
     var kind: String
     var unit: String
+    var maximum: Double?
+    var showsLowHigh: Bool
     var points: [[Double]]
   }
 
