@@ -1,6 +1,7 @@
 import Foundation
 
 /// Records numeric sensor readings and battery levels so the web page can chart the last 7 days.
+/// Samples older than that move to an archive file, which the app only appends to, so none are lost.
 /// HomeKit keeps no history, so the record starts when the app first runs.
 /// Recording happens on the main actor; the web server reads payloads on its own queue.
 final class ReadingHistory: @unchecked Sendable
@@ -73,14 +74,17 @@ final class ReadingHistory: @unchecked Sendable
   private static let pruneInterval: TimeInterval = 6 * 60 * 60
 
   private let fileURL: URL?
+  /// Receives the samples older than 7 days. Without it, they're deleted.
+  private let archiveURL: URL?
   private let lock = NSLock()
   private var series: [Key: [Sample]] = [:]
   private var lastPrune: TimeInterval
   private var isFrozen = false
 
-  init(fileURL: URL?)
+  init(fileURL: URL?, archiveURL: URL? = nil)
   {
     self.fileURL = fileURL
+    self.archiveURL = archiveURL
     lastPrune = Date.now.timeIntervalSince1970
     load()
   }
@@ -93,11 +97,15 @@ final class ReadingHistory: @unchecked Sendable
       return demo()
     }
     #endif
-    return ReadingHistory(fileURL: defaultFileURL())
+    let folder = defaultFolder()
+    return ReadingHistory(
+      fileURL: folder?.appendingPathComponent("history.tsv"),
+      archiveURL: folder?.appendingPathComponent("history-archive.tsv")
+    )
   }
 
-  /// ~/Library/Application Support/<bundle ID>/history.tsv
-  private static func defaultFileURL() -> URL?
+  /// ~/Library/Application Support/<bundle ID>, which holds history.tsv and history-archive.tsv.
+  private static func defaultFolder() -> URL?
   {
     let manager = FileManager.default
     guard let support = manager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else
@@ -113,7 +121,7 @@ final class ReadingHistory: @unchecked Sendable
     {
       return nil
     }
-    return folder.appendingPathComponent("history.tsv")
+    return folder
   }
 
   /// Adds the charted readings and battery levels of devices that are responding. Call whenever the devices change.
@@ -155,7 +163,7 @@ final class ReadingHistory: @unchecked Sendable
         }
       }
     }
-    append(added)
+    append(added, to: fileURL)
     if now - lastPrune >= Self.pruneInterval
     {
       prune(now: now)
@@ -297,6 +305,7 @@ final class ReadingHistory: @unchecked Sendable
     let now = Date.now.timeIntervalSince1970
     let cutoff = now - Self.window
     var loaded: [Key: [Sample]] = [:]
+    var old: [(Key, Sample)] = []
     var dropped = 0
     for line in text.split(separator: "\n")
     {
@@ -309,14 +318,33 @@ final class ReadingHistory: @unchecked Sendable
         let quantity = Quantity(historyKey: String(fields[2])),
         let value = Double(fields[3]),
         value.isFinite,
-        time >= cutoff,
+        time >= 0,
         time <= now
       else
       {
         dropped += 1
         continue
       }
-      loaded[Key(device: device, quantity: quantity), default: []].append(Sample(time: time, value: value))
+      let key = Key(device: device, quantity: quantity)
+      let sample = Sample(time: time, value: value)
+      if time < cutoff
+      {
+        old.append((key, sample))
+      }
+      else
+      {
+        loaded[key, default: []].append(sample)
+      }
+    }
+    // Archived first, so a crash in between leaves a sample in both files rather than in neither.
+    let archived = archive(old)
+    if !archived
+    {
+      // Kept until a later cleanup can archive them.
+      for (key, sample) in old
+      {
+        loaded[key, default: []].append(sample)
+      }
     }
     for key in loaded.keys
     {
@@ -329,23 +357,42 @@ final class ReadingHistory: @unchecked Sendable
     {
       series = loaded
     }
-    if dropped > 0
+    if dropped > 0 || (archived && !old.isEmpty)
     {
       rewrite(loaded)
     }
   }
 
-  private func append(_ entries: [(Key, Sample)])
+  /// Appends samples that left the 7-day window to the archive, oldest first. False if it couldn't write them.
+  private func archive(_ entries: [(Key, Sample)]) -> Bool
   {
-    guard let fileURL, !entries.isEmpty else
+    let sorted = entries.sorted
     {
-      return
+      $0.1.time < $1.1.time
+    }
+    return append(sorted, to: archiveURL)
+  }
+
+  /// False if the samples couldn't be written.
+  @discardableResult
+  private func append(_ entries: [(Key, Sample)], to url: URL?) -> Bool
+  {
+    guard let url, !entries.isEmpty else
+    {
+      return true
     }
     let data = Self.lines(entries)
-    guard let handle = try? FileHandle(forWritingTo: fileURL) else
+    guard let handle = try? FileHandle(forWritingTo: url) else
     {
-      try? data.write(to: fileURL)
-      return
+      do
+      {
+        try data.write(to: url)
+        return true
+      }
+      catch
+      {
+        return false
+      }
     }
     defer
     {
@@ -355,10 +402,12 @@ final class ReadingHistory: @unchecked Sendable
     {
       _ = try handle.seekToEnd()
       try handle.write(contentsOf: data)
+      return true
     }
     catch
     {
-      // Only these samples are lost; recording continues.
+      // Only these samples are lost from this file; recording continues.
+      return false
     }
   }
 
@@ -366,22 +415,40 @@ final class ReadingHistory: @unchecked Sendable
   {
     lastPrune = now
     let cutoff = now - Self.window
-    let kept: [Key: [Sample]] = lock.withLock
+    var kept: [Key: [Sample]] = [:]
+    var old: [(Key, Sample)] = []
+    lock.withLock
     {
-      var result: [Key: [Sample]] = [:]
       for (key, samples) in series
       {
-        let recent = samples.filter
+        var recent: [Sample] = []
+        for sample in samples
         {
-          $0.time >= cutoff
+          if sample.time < cutoff
+          {
+            old.append((key, sample))
+          }
+          else
+          {
+            recent.append(sample)
+          }
         }
         if !recent.isEmpty
         {
-          result[key] = recent
+          kept[key] = recent
         }
       }
-      series = result
-      return result
+    }
+    // Archived first, so a crash in between leaves a sample in both files rather than in neither.
+    // If the archive can't be written, nothing is removed, and the next cleanup tries again.
+    guard archive(old) else
+    {
+      return
+    }
+    // Only recording changes the series, and it runs on this same thread, so nothing changed in between.
+    lock.withLock
+    {
+      series = kept
     }
     rewrite(kept)
   }
