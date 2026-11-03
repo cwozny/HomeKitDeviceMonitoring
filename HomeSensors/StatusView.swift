@@ -59,8 +59,8 @@ struct StatusView: View
 }
 
 #if targetEnvironment(macCatalyst)
-/// Turns off the window's minimize and close buttons. Either one sends the app to the background,
-/// where HomeKit sends no changes.
+/// Turns off the window's minimize and close buttons. Either one makes the app not visible, and HomeKit
+/// sends no changes to an app that isn't visible.
 private struct WindowLock: UIViewRepresentable
 {
   func makeUIView(context: Context) -> LockingView

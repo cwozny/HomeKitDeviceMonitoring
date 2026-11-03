@@ -42,8 +42,8 @@ struct HomeSensorsApp: App
   }
 }
 
-/// Removes Hide, Hide Others, and Show All from the app menu. Hiding the app sends it to the background,
-/// where HomeKit sends no changes.
+/// Removes Hide, Hide Others, and Show All from the app menu. Hiding the app makes it not visible, and
+/// HomeKit sends no changes to an app that isn't visible.
 final class AppDelegate: UIResponder, UIApplicationDelegate
 {
   override func buildMenu(with builder: UIMenuBuilder)
