@@ -2,6 +2,7 @@ import Foundation
 import HomeKit
 import Observation
 import os
+import UIKit
 
 /// Reads accessories from Apple Home and publishes value snapshots for the dashboard.
 @MainActor
@@ -55,6 +56,20 @@ final class HomeStore: NSObject
     let manager = HMHomeManager()
     manager.delegate = self
     self.manager = manager
+    // HomeKit sends no changes to an app in the background, so the log records each time the app goes there.
+    let center = NotificationCenter.default
+    center.addObserver(self, selector: #selector(didEnterBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
+    center.addObserver(self, selector: #selector(willEnterForeground), name: UIApplication.willEnterForegroundNotification, object: nil)
+  }
+
+  @objc private func didEnterBackground()
+  {
+    Self.logger.notice("The app went to the background. HomeKit sends no changes until it comes back.")
+  }
+
+  @objc private func willEnterForeground()
+  {
+    Self.logger.notice("The app is in the foreground again")
   }
 
   /// Reads every tracked characteristic and turns on change notifications.

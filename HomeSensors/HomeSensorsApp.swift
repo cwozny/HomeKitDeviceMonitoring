@@ -6,6 +6,7 @@ struct HomeSensorsApp: App
   /// Xcode runs the unit tests inside the app. Then the app starts neither HomeKit nor the web server.
   static let isRunningTests = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @State private var store: HomeStore
   @State private var web: WebDashboard
 
@@ -37,6 +38,20 @@ struct HomeSensorsApp: App
           .environment(store)
           .environment(web)
       }
+    }
+  }
+}
+
+/// Removes Hide, Hide Others, and Show All from the app menu. Hiding the app sends it to the background,
+/// where HomeKit sends no changes.
+final class AppDelegate: UIResponder, UIApplicationDelegate
+{
+  override func buildMenu(with builder: UIMenuBuilder)
+  {
+    super.buildMenu(with: builder)
+    if builder.system == .main
+    {
+      builder.remove(menu: .hide)
     }
   }
 }
