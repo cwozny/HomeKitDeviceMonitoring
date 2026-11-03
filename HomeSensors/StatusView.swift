@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The app's window. The dashboard itself is the web page, so the window shows only the page's address,
 /// when data last arrived, and HomeKit problems.
@@ -36,6 +37,9 @@ struct StatusView: View
       webLabel
     }
     .padding(20)
+    #if targetEnvironment(macCatalyst)
+    .background(WindowLock())
+    #endif
   }
 
   @ViewBuilder
@@ -53,3 +57,32 @@ struct StatusView: View
     }
   }
 }
+
+#if targetEnvironment(macCatalyst)
+/// Turns off the window's minimize and close buttons. Either one sends the app to the background,
+/// where HomeKit sends no changes.
+private struct WindowLock: UIViewRepresentable
+{
+  func makeUIView(context: Context) -> LockingView
+  {
+    LockingView()
+  }
+
+  func updateUIView(_ uiView: LockingView, context: Context)
+  {
+  }
+
+  final class LockingView: UIView
+  {
+    override func didMoveToWindow()
+    {
+      super.didMoveToWindow()
+      if let behaviors = window?.windowScene?.windowingBehaviors
+      {
+        behaviors.isMiniaturizable = false
+        behaviors.isClosable = false
+      }
+    }
+  }
+}
+#endif
