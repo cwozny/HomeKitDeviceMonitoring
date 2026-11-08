@@ -1,7 +1,8 @@
 import Foundation
 
 /// Records numeric sensor readings and battery levels so the web page can chart the last 7 days.
-/// Samples older than that move to an archive file, which the app only appends to, so none are lost.
+/// The daily low and high are for full days, so the samples of the whole first day of the 7 stay too.
+/// Older samples move to an archive file, which the app only appends to, so none are lost.
 /// HomeKit keeps no history, so the record starts when the app first runs.
 /// Recording happens on the main actor; the web server reads payloads on its own queue.
 final class ReadingHistory: @unchecked Sendable
@@ -74,7 +75,7 @@ final class ReadingHistory: @unchecked Sendable
   private static let pruneInterval: TimeInterval = 6 * 60 * 60
 
   private let fileURL: URL?
-  /// Receives the samples older than 7 days. Without it, they're deleted.
+  /// Receives the samples from before the first day of the 7 days. Without it, they're deleted.
   private let archiveURL: URL?
   private let lock = NSLock()
   private var series: [Key: [Sample]] = [:]
@@ -124,6 +125,13 @@ final class ReadingHistory: @unchecked Sendable
       return nil
     }
     return folder
+  }
+
+  /// Midnight at the start of the first of the 7 days, on the Mac's calendar.
+  /// Samples from then on stay in memory and in the history file. Older samples move to the archive.
+  private static func startOfFirstDay(_ now: TimeInterval) -> TimeInterval
+  {
+    Calendar.current.startOfDay(for: Date(timeIntervalSince1970: now - window)).timeIntervalSince1970
   }
 
   /// Adds the charted readings and battery levels of devices that are responding. Call whenever the devices change.
@@ -191,11 +199,13 @@ final class ReadingHistory: @unchecked Sendable
     return values
   }
 
-  /// The JSON behind the History view: each series for the last 7 days, averaged into 10-minute buckets.
+  /// The JSON behind the History view: each series for the last 7 days, averaged into 10-minute buckets,
+  /// and the low and high of each full day.
   func payload(at date: Date = .now) -> Data
   {
     let now = date.timeIntervalSince1970
     let start = now - Self.window
+    let firstDay = Self.startOfFirstDay(now)
     let (snapshot, started) = lock.withLock
     {
       (series, firstRecorded)
@@ -209,7 +219,8 @@ final class ReadingHistory: @unchecked Sendable
     var list: [HistoryPayload.Series] = []
     for key in keys
     {
-      let recent = (snapshot[key] ?? []).filter
+      let samples = snapshot[key] ?? []
+      let recent = samples.filter
       {
         $0.time >= start
       }
@@ -217,6 +228,18 @@ final class ReadingHistory: @unchecked Sendable
       {
         continue
       }
+
+      var days: [HistoryPayload.Day]?
+      if style.showsLowHigh
+      {
+        // The first day starts before the 7 days, and its low and high are for the full day too.
+        let fullDays = samples.filter
+        {
+          $0.time >= firstDay
+        }
+        days = Self.days(Self.buckets(fullDays, convert: style.convert))
+      }
+
       list.append(HistoryPayload.Series(
         device: key.device.uuidString,
         kind: name,
@@ -227,7 +250,8 @@ final class ReadingHistory: @unchecked Sendable
         nonNegative: style.nonNegative,
         maximum: style.maximum,
         showsLowHigh: style.showsLowHigh,
-        points: Self.buckets(recent, convert: style.convert)
+        points: Self.buckets(recent, convert: style.convert),
+        days: days
       ))
     }
     var recordingSince: Int?
@@ -282,6 +306,54 @@ final class ReadingHistory: @unchecked Sendable
     return points
   }
 
+  /// The low, high, and average of each day on the Mac's calendar, from the 10-minute averages, oldest first.
+  private static func days(_ points: [[Double]]) -> [HistoryPayload.Day]
+  {
+    let calendar = Calendar.current
+    var days: [HistoryPayload.Day] = []
+    var current: Date?
+    var low = 0.0
+    var high = 0.0
+    var sum = 0.0
+    var count = 0.0
+    func flush()
+    {
+      if let current, count > 0
+      {
+        days.append(HistoryPayload.Day(date: dateText(current, calendar), low: low, high: high, average: sum / count))
+      }
+    }
+
+    for point in points
+    {
+      let day = calendar.startOfDay(for: Date(timeIntervalSince1970: point[0]))
+      if day != current
+      {
+        flush()
+        current = day
+        low = point[1]
+        high = point[1]
+        sum = 0
+        count = 0
+      }
+
+      low = min(low, point[1])
+      high = max(high, point[1])
+      sum += point[1]
+      count += 1
+    }
+
+    flush()
+    return days
+  }
+
+  /// A day on the Mac's calendar as text, such as "2026-11-01".
+  private static func dateText(_ day: Date, _ calendar: Calendar) -> String
+  {
+    let parts = calendar.dateComponents([.year, .month, .day], from: day)
+    return String(format: "%04ld-%02ld-%02ld", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+  }
+
   // MARK: - File
 
   /// One sample per line: seconds since 1970, device ID, kind, and raw HomeKit value, separated by tabs.
@@ -305,7 +377,7 @@ final class ReadingHistory: @unchecked Sendable
       return
     }
     let now = Date.now.timeIntervalSince1970
-    let cutoff = now - Self.window
+    let cutoff = Self.startOfFirstDay(now)
     var loaded: [Key: [Sample]] = [:]
     var old: [(Key, Sample)] = []
     var first = Self.firstTime(in: archiveURL, now: now)
@@ -397,7 +469,7 @@ final class ReadingHistory: @unchecked Sendable
     return time
   }
 
-  /// Appends samples that left the 7-day window to the archive, oldest first. False if it couldn't write them.
+  /// Appends samples from before the first day of the 7 days to the archive, oldest first. False if it couldn't write them.
   private func archive(_ entries: [(Key, Sample)]) -> Bool
   {
     let sorted = entries.sorted
@@ -448,7 +520,7 @@ final class ReadingHistory: @unchecked Sendable
   private func prune(now: TimeInterval)
   {
     lastPrune = now
-    let cutoff = now - Self.window
+    let cutoff = Self.startOfFirstDay(now)
     var kept: [Key: [Sample]] = [:]
     var old: [(Key, Sample)] = []
     lock.withLock
@@ -528,6 +600,18 @@ struct HistoryPayload: Encodable
     var showsLowHigh: Bool
     /// [seconds since 1970, value in `unit`] pairs, oldest first.
     var points: [[Double]]
+    /// The low, high, and average of each day, oldest first, for the daily table. Nil when the page shows no low and high.
+    var days: [Day]?
+  }
+
+  /// The low, high, and average of one full day, or of today since midnight, in the series' unit.
+  struct Day: Encodable
+  {
+    /// The day on the Mac's calendar, such as "2026-11-01".
+    var date: String
+    var low: Double
+    var high: Double
+    var average: Double
   }
 
   var now: Int
@@ -668,12 +752,13 @@ extension Reading.Kind
 #if DEBUG
 extension ReadingHistory
 {
-  /// Seven days of made-up readings for `-demo` launches. Kept in memory only.
+  /// Seven days of made-up readings, from the start of the first day, for `-demo` launches. Kept in memory only.
   static func demo() -> ReadingHistory
   {
     let history = ReadingHistory(fileURL: nil)
     let now = Date.now.timeIntervalSince1970
-    let start = now - window
+    // From midnight, so the first day has a full low and high.
+    let start = startOfFirstDay(now)
     // Three hours with the app closed on the third day, to show how a gap looks.
     let gapStart = start + 2.5 * 86_400
     let gap = gapStart...(gapStart + 3 * 3_600)
