@@ -78,6 +78,8 @@ final class ReadingHistory: @unchecked Sendable
   private let archiveURL: URL?
   private let lock = NSLock()
   private var series: [Key: [Sample]] = [:]
+  /// When the app recorded its first sample. That sample can be in the archive.
+  private var firstRecorded: TimeInterval?
   private var lastPrune: TimeInterval
   private var isFrozen = false
 
@@ -160,6 +162,7 @@ final class ReadingHistory: @unchecked Sendable
           let sample = Sample(time: now, value: value)
           series[key, default: []].append(sample)
           added.append((key, sample))
+          firstRecorded = min(firstRecorded ?? now, now)
         }
       }
     }
@@ -193,9 +196,9 @@ final class ReadingHistory: @unchecked Sendable
   {
     let now = date.timeIntervalSince1970
     let start = now - Self.window
-    let snapshot = lock.withLock
+    let (snapshot, started) = lock.withLock
     {
-      series
+      (series, firstRecorded)
     }
     let temperatureUnit = UnitTemperature(forLocale: .current, usage: .weather)
     // By kind in chart order, so the page lists the kinds in its filter in that order. Then by device.
@@ -204,18 +207,16 @@ final class ReadingHistory: @unchecked Sendable
       ($0.quantity.order, $0.device.uuidString) < ($1.quantity.order, $1.device.uuidString)
     }
     var list: [HistoryPayload.Series] = []
-    var earliest: TimeInterval?
     for key in keys
     {
       let recent = (snapshot[key] ?? []).filter
       {
         $0.time >= start
       }
-      guard let first = recent.first, let name = key.quantity.historyKey, let style = ChartStyle(quantity: key.quantity, temperatureUnit: temperatureUnit) else
+      guard !recent.isEmpty, let name = key.quantity.historyKey, let style = ChartStyle(quantity: key.quantity, temperatureUnit: temperatureUnit) else
       {
         continue
       }
-      earliest = min(earliest ?? first.time, first.time)
       list.append(HistoryPayload.Series(
         device: key.device.uuidString,
         kind: name,
@@ -230,9 +231,10 @@ final class ReadingHistory: @unchecked Sendable
       ))
     }
     var recordingSince: Int?
-    if let earliest
+    // Not the first sample in the window, because the window can start in a pause.
+    if let started
     {
-      recordingSince = Int(earliest)
+      recordingSince = Int(started)
     }
     let payload = HistoryPayload(
       now: Int(now),
@@ -306,6 +308,7 @@ final class ReadingHistory: @unchecked Sendable
     let cutoff = now - Self.window
     var loaded: [Key: [Sample]] = [:]
     var old: [(Key, Sample)] = []
+    var first = Self.firstTime(in: archiveURL, now: now)
     var dropped = 0
     for line in text.split(separator: "\n")
     {
@@ -327,6 +330,7 @@ final class ReadingHistory: @unchecked Sendable
       }
       let key = Key(device: device, quantity: quantity)
       let sample = Sample(time: time, value: value)
+      first = min(first ?? time, time)
       if time < cutoff
       {
         old.append((key, sample))
@@ -356,11 +360,41 @@ final class ReadingHistory: @unchecked Sendable
     lock.withLock
     {
       series = loaded
+      firstRecorded = first
     }
     if dropped > 0 || (archived && !old.isEmpty)
     {
       rewrite(loaded)
     }
+  }
+
+  /// The time on the archive's first line. The archive gets the oldest samples first, so that's when recording started.
+  /// Nil when there's no archive or the line has no usable time.
+  private static func firstTime(in url: URL?, now: TimeInterval) -> TimeInterval?
+  {
+    guard let url, let handle = try? FileHandle(forReadingFrom: url) else
+    {
+      return nil
+    }
+
+    defer
+    {
+      try? handle.close()
+    }
+
+    // A line is less than 100 bytes, and the archive grows without limit, so only its start is read.
+    guard let data = try? handle.read(upToCount: 1_024),
+      let line = String(decoding: data, as: UTF8.self).split(separator: "\n").first,
+      let field = line.split(separator: "\t").first,
+      let time = Double(field),
+      time >= 0,
+      time <= now
+    else
+    {
+      return nil
+    }
+
+    return time
   }
 
   /// Appends samples that left the 7-day window to the archive, oldest first. False if it couldn't write them.
@@ -498,7 +532,7 @@ struct HistoryPayload: Encodable
 
   var now: Int
   var start: Int
-  /// When the oldest sample in the window was recorded. Nil until anything is recorded.
+  /// When the app recorded its first sample, which can be older than the window. Nil until anything is recorded.
   var recordingSince: Int?
   var bucketSeconds: Int
   var series: [Series]
@@ -687,6 +721,7 @@ extension ReadingHistory
     history.lock.withLock
     {
       history.series = seeded
+      history.firstRecorded = start
     }
     history.isFrozen = true
     return history
