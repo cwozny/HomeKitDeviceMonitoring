@@ -1383,28 +1383,14 @@
       }
     }
 
-    // The table twin of a chart: one row per day, newest first.
+    // The table twin of a chart: one row per day, newest first. The app gives the low and high of each full day,
+    // also for the first day, which starts before the chart.
     function renderTable(series, chartKey)
     {
       const details = element("details", "table-view");
       details.dataset.key = chartKey;
       details.append(element("summary", null, "Daily low and high"));
-      const days = [];
-      let current = null;
-      for (const point of series.points)
-      {
-        const date = new Date(point[0] * 1000);
-        const key = date.toDateString();
-        if (current === null || current.key !== key)
-        {
-          current = { key: key, date: date, low: point[1], high: point[1], sum: 0, count: 0 };
-          days.push(current);
-        }
-        current.low = Math.min(current.low, point[1]);
-        current.high = Math.max(current.high, point[1]);
-        current.sum += point[1];
-        current.count += 1;
-      }
+      const days = series.days || [];
       const headRow = element("tr");
       for (const label of ["Day", "Low", "High", "Average"])
       {
@@ -1419,13 +1405,13 @@
       {
         const day = days[index];
         const row = element("tr");
-        const name = element("th", null, day.date.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }));
+        const name = element("th", null, dayLabel(day.date));
         name.scope = "row";
         row.append(
           name,
           element("td", null, formatNumber(day.low, series.decimals)),
           element("td", null, formatNumber(day.high, series.decimals)),
-          element("td", null, formatNumber(day.sum / day.count, series.decimals))
+          element("td", null, formatNumber(day.average, series.decimals))
         );
         body.append(row);
       }
@@ -1433,6 +1419,13 @@
       table.append(head, body);
       details.append(table);
       return details;
+    }
+
+    // A date such as "2026-11-01" from the Mac's calendar, shown as that date in any time zone.
+    function dayLabel(text)
+    {
+      const parts = text.split("-").map(Number);
+      return new Date(parts[0], parts[1] - 1, parts[2]).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
     }
 
     function drawCharts()

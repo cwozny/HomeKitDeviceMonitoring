@@ -74,7 +74,7 @@ struct ReadingHistoryTests
     #expect(abs(temperature.points[0][1] - (average * 10).rounded() / 10) < 0.001)
   }
 
-  @Test("Moves readings older than 7 days to the archive and drops damaged lines when it loads the file")
+  @Test("Moves readings from before the first of the 7 days to the archive and drops damaged lines when it loads the file")
   func archivesOldLinesWhenLoading() throws
   {
     let file = temporaryFile()
@@ -85,7 +85,7 @@ struct ReadingHistoryTests
       try? FileManager.default.removeItem(at: archive)
     }
     ReadingHistory(fileURL: file, archiveURL: archive).record([sensor(temperature: 20, humidity: 50)], at: start)
-    let old = "\(Int(Date.now.timeIntervalSince1970 - 8 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5"
+    let old = "\(Int(Date.now.timeIntervalSince1970 - 9 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5"
     let handle = try FileHandle(forWritingTo: file)
     _ = try handle.seekToEnd()
     try handle.write(contentsOf: Data((old + "\nnot a reading\n").utf8))
@@ -97,7 +97,7 @@ struct ReadingHistoryTests
     #expect(archived.map(String.init) == [old])
   }
 
-  @Test("Keeps samples older than 7 days when it can't write the archive, so a later cleanup can try again")
+  @Test("Keeps samples from before the first of the 7 days when it can't write the archive, so a later cleanup can try again")
   func keepsSamplesWhenArchiveFails() throws
   {
     let file = temporaryFile()
@@ -108,20 +108,20 @@ struct ReadingHistoryTests
     // In a folder that doesn't exist, so the archive can't be written.
     let archive = FileManager.default.temporaryDirectory.appendingPathComponent("HomeSensorsTests-\(UUID().uuidString)/archive.tsv")
     ReadingHistory(fileURL: file, archiveURL: archive).record([sensor(temperature: 20, humidity: 50)], at: start)
-    let old = "\(Int(Date.now.timeIntervalSince1970 - 8 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5\n"
+    let old = "\(Int(Date.now.timeIntervalSince1970 - 9 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5\n"
     let handle = try FileHandle(forWritingTo: file)
     _ = try handle.seekToEnd()
     try handle.write(contentsOf: Data(old.utf8))
     try handle.close()
     // Loading keeps the old line, and so does the cleanup while the app runs.
     let history = ReadingHistory(fileURL: file, archiveURL: archive)
-    history.record([sensor(temperature: 21, humidity: 51)], at: start + 8 * 86_400)
+    history.record([sensor(temperature: 21, humidity: 51)], at: start + 9 * 86_400)
     let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
     #expect(lines.count == 5)
     #expect(!FileManager.default.fileExists(atPath: archive.path))
   }
 
-  @Test("Moves samples to the archive as they get older than 7 days while the app runs")
+  @Test("Moves samples to the archive while the app runs, after their day is before the first of the 7 days")
   func archivesWhileRunning() throws
   {
     let file = temporaryFile()
@@ -133,8 +133,8 @@ struct ReadingHistoryTests
     }
     let history = ReadingHistory(fileURL: file, archiveURL: archive)
     history.record([sensor(temperature: 20, humidity: 50)], at: start)
-    // Eight days later, the first samples are outside the window and the 6-hourly cleanup is due.
-    history.record([sensor(temperature: 21, humidity: 51)], at: start + 8 * 86_400)
+    // Nine days later, the day of the first samples is before the first of the 7 days, and the 6-hourly cleanup is due.
+    history.record([sensor(temperature: 21, humidity: 51)], at: start + 9 * 86_400)
     let archived = try String(contentsOf: archive, encoding: .utf8).split(separator: "\n")
     let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
     #expect(archived.count == 2)
@@ -169,7 +169,7 @@ struct ReadingHistoryTests
     }
 
     let now = Int(Date.now.timeIntervalSince1970)
-    let first = now - 8 * 86_400
+    let first = now - 9 * 86_400
     // No readings in the first day of the window.
     let lines = [
       "\(first)\t\(deviceID.uuidString)\thumidity\t50",
@@ -181,6 +181,67 @@ struct ReadingHistoryTests
     let nextLaunch = try decode(ReadingHistory(fileURL: file, archiveURL: archive).payload())
     #expect(firstLaunch.recordingSince == first)
     #expect(nextLaunch.recordingSince == first)
+  }
+
+  @Test("Gives the low and high of each full day, also for the first day, which starts before the 7 days")
+  func dailyLowAndHighCoverFullDays() throws
+  {
+    let calendar = Calendar.current
+    // In the afternoon, so the 7 days start in the afternoon of the first day.
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 15)))
+    let windowStart = now - ReadingHistory.window
+    let history = ReadingHistory(fileURL: nil)
+    // The lowest humidity of the first day is in its morning, before the 7 days start.
+    history.record([sensor(temperature: 20, humidity: 30, battery: 90)], at: calendar.startOfDay(for: windowStart) + 6 * 3_600)
+    history.record([sensor(temperature: 20, humidity: 50, battery: 90)], at: windowStart + 3_600)
+    history.record([sensor(temperature: 20, humidity: 60, battery: 90)], at: now - 3_600)
+    let payload = try decode(history.payload(at: now))
+    let humidities = payload.series.filter
+    {
+      $0.kind == "humidity"
+    }
+    let humidity = try #require(humidities.first)
+    let days = try #require(humidity.days)
+    #expect(days.map(\.date) == ["2026-03-13", "2026-03-20"])
+    #expect(days[0].low == 30)
+    #expect(days[0].high == 50)
+    #expect(days[0].average == 40)
+    #expect(days[1].low == 60)
+    // The chart still starts when the 7 days start.
+    #expect(humidity.points.count == 2)
+    // The page shows no low and high for the battery level.
+    let batteries = payload.series.filter
+    {
+      $0.kind == "battery"
+    }
+    let battery = try #require(batteries.first)
+    #expect(battery.days == nil)
+  }
+
+  @Test("Keeps the samples of the whole first day in the file when it loads it, and moves older samples to the archive")
+  func keepsFirstDayWhenLoading() throws
+  {
+    let file = temporaryFile()
+    let archive = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: archive)
+    }
+
+    let now = Date.now.timeIntervalSince1970
+    let firstDay = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: now - ReadingHistory.window))
+    // The sample at the start of the first day is older than 7 days, but its day is one of the 7.
+    let lines = [
+      "\(Int(now) - 9 * 86_400)\t\(deviceID.uuidString)\thumidity\t40.5",
+      "\(Int(firstDay.timeIntervalSince1970))\t\(deviceID.uuidString)\thumidity\t45.5",
+    ]
+    try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file)
+    _ = ReadingHistory(fileURL: file, archiveURL: archive)
+    let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map(String.init)
+    let archived = try String(contentsOf: archive, encoding: .utf8).split(separator: "\n").map(String.init)
+    #expect(kept == [lines[1]])
+    #expect(archived == [lines[0]])
   }
 
   @Test("Saves the battery level and charts it last, up to 100 percent and without a low and high")
@@ -316,6 +377,15 @@ private struct DecodedPayload: Decodable
     var maximum: Double?
     var showsLowHigh: Bool
     var points: [[Double]]
+    var days: [Day]?
+  }
+
+  struct Day: Decodable
+  {
+    var date: String
+    var low: Double
+    var high: Double
+    var average: Double
   }
 
   var recordingSince: Int?
