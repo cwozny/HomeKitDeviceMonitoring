@@ -145,6 +145,44 @@ struct ReadingHistoryTests
     }
   }
 
+  @Test("Keeps the time that recording started after the cleanup removes the first samples, so a pause at the start of the window doesn't shorten the charts")
+  func keepsRecordingStartAfterCleanup() throws
+  {
+    let history = ReadingHistory(fileURL: nil)
+    history.record([sensor(temperature: 20, humidity: 50)], at: start)
+    // Eight days later, after a day with no readings, the window starts in that pause.
+    let later = start + 8 * 86_400
+    history.record([sensor(temperature: 21, humidity: 51)], at: later)
+    let payload = try decode(history.payload(at: later))
+    #expect(payload.recordingSince == Int(start.timeIntervalSince1970))
+  }
+
+  @Test("Finds the time that recording started in the archive after a launch moves the first samples there")
+  func findsRecordingStartInArchive() throws
+  {
+    let file = temporaryFile()
+    let archive = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: archive)
+    }
+
+    let now = Int(Date.now.timeIntervalSince1970)
+    let first = now - 8 * 86_400
+    // No readings in the first day of the window.
+    let lines = [
+      "\(first)\t\(deviceID.uuidString)\thumidity\t50",
+      "\(now - 6 * 86_400)\t\(deviceID.uuidString)\thumidity\t51",
+    ]
+    try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file)
+    // The first launch moves the oldest sample to the archive. The next launch finds it only there.
+    let firstLaunch = try decode(ReadingHistory(fileURL: file, archiveURL: archive).payload())
+    let nextLaunch = try decode(ReadingHistory(fileURL: file, archiveURL: archive).payload())
+    #expect(firstLaunch.recordingSince == first)
+    #expect(nextLaunch.recordingSince == first)
+  }
+
   @Test("Saves the battery level and charts it last, up to 100 percent and without a low and high")
   func chartsBatteryLevel() throws
   {
