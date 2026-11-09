@@ -1,4 +1,5 @@
 import Testing
+import UIKit
 @testable import HomeSensors
 
 @Suite("Test environment")
@@ -8,5 +9,16 @@ struct AppTests
   func detectsTests()
   {
     #expect(HomeSensorsApp.isRunningTests)
+  }
+}
+
+@Suite("App window")
+struct WindowTests
+{
+  @Test("The app has one window only, because the window can't be closed or minimized")
+  @MainActor
+  func oneWindow()
+  {
+    #expect(!UIApplication.shared.supportsMultipleScenes)
   }
 }

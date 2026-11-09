@@ -8,5 +8,11 @@
   <string>Home Sensors serves its dashboard as a web page to phones and computers on your local network.</string>
   <key>HomeSensorsAllowedHosts</key>
   <string>$(HOME_SENSORS_ALLOWED_HOSTS)</string>
+  <!-- One window only. The window can't be closed or minimized, so only Quit could remove a second one. -->
+  <key>UIApplicationSceneManifest</key>
+  <dict>
+    <key>UIApplicationSupportsMultipleScenes</key>
+    <false/>
+  </dict>
 </dict>
 </plist>
