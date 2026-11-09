@@ -1378,16 +1378,16 @@
       }
     }
 
-    // The table twin of a chart: one row per day, newest first. The app gives the low and high of each full day,
+    // The table twin of a chart: one row per day, newest first. The app gives the min, max, and median of each full day,
     // also for the first day, which starts before the chart.
     function renderTable(series, chartKey)
     {
       const details = element("details", "table-view");
       details.dataset.key = chartKey;
-      details.append(element("summary", null, "Daily low and high"));
+      details.append(element("summary", null, "Daily min, max, and median"));
       const days = series.days;
       const headRow = element("tr");
-      for (const label of ["Day", "Low", "High", "Average"])
+      for (const label of ["Day", "Min", "Max", "Median"])
       {
         const cell = element("th", null, label === "Day" ? label : label + " (" + series.unit + ")");
         cell.scope = "col";
@@ -1406,7 +1406,7 @@
           name,
           element("td", null, formatNumber(day.low, series.decimals)),
           element("td", null, formatNumber(day.high, series.decimals)),
-          element("td", null, formatNumber(day.average, series.decimals))
+          element("td", null, formatNumber(day.median, series.decimals))
         );
         body.append(row);
       }
