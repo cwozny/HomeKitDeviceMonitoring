@@ -1,4 +1,4 @@
-// Signing settings for the HomeSensors target.
+// Signing and host settings for the HomeSensors target.
 //
 // Put your own team and bundle identifier in Local.xcconfig next to this file.
 // Git ignores Local.xcconfig, so they stay out of the repository. For example:
@@ -8,8 +8,15 @@
 //
 // Reading HomeKit data needs an App ID with the HomeKit capability, so build for iOS once
 // with automatic signing before the first Mac build.
+//
+// The web server answers only requests to an IP address, localhost, or a .local name.
+// To open the dashboard by another name, for example a VPN name, put the full names in
+// Local.xcconfig too, separated by spaces:
+//
+//   HOME_SENSORS_ALLOWED_HOSTS = studio-mac.example.net
 
 DEVELOPMENT_TEAM =
 PRODUCT_BUNDLE_IDENTIFIER = com.example.HomeSensors
+HOME_SENSORS_ALLOWED_HOSTS =
 
 #include? "Local.xcconfig"
