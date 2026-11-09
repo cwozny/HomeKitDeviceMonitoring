@@ -29,9 +29,10 @@ struct StatusView: View
           description: Text("Set up a home in the Home app first.")
         )
       case .ready:
+        // Always with the date: the text changes only when data arrives, also on a later day.
         if let lastUpdate = store.lastUpdate
         {
-          Text("Updated \(lastUpdate, format: .dateTime.hour().minute())")
+          Text("Updated \(lastUpdate, format: .dateTime.month().day().hour().minute())")
         }
       }
       webLabel
