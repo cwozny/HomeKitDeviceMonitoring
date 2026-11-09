@@ -734,9 +734,18 @@
       return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
     }
 
+    // The date shows only for an earlier day, so the header fits on one line on a phone.
     function formatTime(iso)
     {
-      return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+      const date = new Date(iso);
+      const options = { hour: "numeric", minute: "2-digit" };
+      if (date.toDateString() !== new Date().toDateString())
+      {
+        options.month = "short";
+        options.day = "numeric";
+      }
+
+      return date.toLocaleString([], options);
     }
 
     function render()
@@ -1799,7 +1808,7 @@
 
     function formatMoment(seconds)
     {
-      return new Date(seconds * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+      return new Date(seconds * 1000).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
     }
 
     function loadHistoryIfDue()
