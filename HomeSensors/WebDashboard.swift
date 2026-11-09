@@ -168,7 +168,7 @@ struct WebRouter
   {
     guard let host = request.host, host == advertisedHost || Self.allows(host: host) else
     {
-      return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or a Tailscale name.")
+      return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or a full Tailscale name that ends in .ts.net.")
     }
     switch (request.method, request.path)
     {
@@ -193,11 +193,9 @@ struct WebRouter
     {
       return true
     }
-    // Single-label names, such as Tailscale's short machine names, don't come from public DNS.
-    if !host.contains(".")
-    {
-      return true
-    }
+
+    // A name without a dot, such as a short Tailscale name, isn't allowed. A browser can complete it with a DNS search domain,
+    // and the owner of that domain can make it point to this Mac.
     return host.hasSuffix(".local") || host.hasSuffix(".ts.net")
   }
 }

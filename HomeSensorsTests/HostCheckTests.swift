@@ -14,14 +14,15 @@ struct HostCheckTests
     "fe80::1",
     "studio-mac.local",
     "studio-mac.example-tailnet.ts.net",
-    "studio-mac",
   ])
   func allowsLocalNames(host: String)
   {
     #expect(WebRouter.allows(host: host))
   }
 
-  @Test("Refuses public names, which DNS rebinding needs", arguments: [
+  @Test("Refuses public names and names without a dot, which DNS rebinding needs", arguments: [
+    // A short Tailscale name, or a name that a DNS search domain can complete.
+    "studio-mac",
     "example.com",
     "attacker.example",
     "studio-mac.ts.net.attacker.example",
