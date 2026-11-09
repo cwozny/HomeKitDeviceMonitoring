@@ -1,6 +1,6 @@
 import Foundation
 
-/// Records numeric sensor readings and battery levels so the web page can chart the last 7 days.
+/// Records numeric sensor readings and battery levels. The web page charts the readings of the last 7 days.
 /// The daily low and high are for full days, so the samples of the whole first day of the 7 stay too.
 /// Older samples move to an archive file, which the app only appends to, so none are lost.
 /// HomeKit keeps no history, so the record starts when the app first runs.
@@ -19,7 +19,7 @@ final class ReadingHistory: @unchecked Sendable
     case reading(Reading.Kind)
     case battery
 
-    /// Stable name in the history file and the page data. Nil for readings the History view doesn't chart.
+    /// Stable name in the history file and, for a reading, in the page data. Nil for readings the History view doesn't chart.
     var historyKey: String?
     {
       switch self
@@ -44,18 +44,6 @@ final class ReadingHistory: @unchecked Sendable
       else
       {
         return nil
-      }
-    }
-
-    /// Each device's charts come in this order: its readings, then its battery level.
-    var order: Int
-    {
-      switch self
-      {
-      case .reading(let kind):
-        kind.rawValue
-      case .battery:
-        Int.max
       }
     }
   }
@@ -199,8 +187,8 @@ final class ReadingHistory: @unchecked Sendable
     return values
   }
 
-  /// The JSON behind the History view: each series for the last 7 days, averaged into 10-minute buckets,
-  /// its lowest and highest readings, and the low and high of each full day.
+  /// The JSON behind the History view: each reading's series for the last 7 days, averaged into 10-minute buckets,
+  /// its lowest and highest readings, and the low and high of each full day. The battery levels aren't in it.
   func payload(at date: Date = .now) -> Data
   {
     let now = date.timeIntervalSince1970
@@ -211,45 +199,49 @@ final class ReadingHistory: @unchecked Sendable
       (series, firstRecorded)
     }
     let temperatureUnit = UnitTemperature(forLocale: .current, usage: .weather)
-    // By kind in chart order, so the page lists the kinds in its filter in that order. Then by device.
-    let keys = snapshot.keys.sorted
+    // Only the readings have charts. The battery level changes too little in 7 days, but the file still records it.
+    var charted: [(key: Key, kind: Reading.Kind)] = []
+    for key in snapshot.keys
     {
-      ($0.quantity.order, $0.device.uuidString) < ($1.quantity.order, $1.device.uuidString)
+      if case .reading(let kind) = key.quantity
+      {
+        charted.append((key, kind))
+      }
+    }
+
+    // By kind in chart order, so the page lists the kinds in its filter in that order. Then by device.
+    charted.sort
+    {
+      ($0.kind.rawValue, $0.key.device.uuidString) < ($1.kind.rawValue, $1.key.device.uuidString)
     }
     var list: [HistoryPayload.Series] = []
-    for key in keys
+    for (key, kind) in charted
     {
       let samples = snapshot[key] ?? []
       let recent = samples.filter
       {
         $0.time >= start
       }
-      guard !recent.isEmpty, let name = key.quantity.historyKey, let style = ChartStyle(quantity: key.quantity, temperatureUnit: temperatureUnit) else
+      guard !recent.isEmpty, let name = kind.historyKey, let style = ChartStyle(kind: kind, temperatureUnit: temperatureUnit) else
       {
         continue
       }
 
-      var low: Double?
-      var high: Double?
-      var days: [HistoryPayload.Day]?
-      if style.showsLowHigh
+      // From the readings, because a 10-minute average hides a short low or high.
+      var low = Double.infinity
+      var high = -Double.infinity
+      for sample in recent
       {
-        // From the readings, because a 10-minute average hides a short low or high.
-        for sample in recent
-        {
-          let value = style.convert(sample.value)
-          low = min(low ?? value, value)
-          high = max(high ?? value, value)
-        }
-
-        // The first day starts before the 7 days, and its low and high are for the full day too.
-        let fullDays = samples.filter
-        {
-          $0.time >= firstDay
-        }
-        days = Self.days(fullDays, convert: style.convert)
+        let value = style.convert(sample.value)
+        low = min(low, value)
+        high = max(high, value)
       }
 
+      // The first day starts before the 7 days, and its low and high are for the full day too.
+      let fullDays = samples.filter
+      {
+        $0.time >= firstDay
+      }
       list.append(HistoryPayload.Series(
         device: key.device.uuidString,
         kind: name,
@@ -258,12 +250,10 @@ final class ReadingHistory: @unchecked Sendable
         decimals: style.decimals,
         minimumSpan: style.minimumSpan,
         nonNegative: style.nonNegative,
-        maximum: style.maximum,
-        showsLowHigh: style.showsLowHigh,
         low: low,
         high: high,
         points: Self.buckets(recent, convert: style.convert),
-        days: days
+        days: Self.days(fullDays, convert: style.convert)
       ))
     }
     var recordingSince: Int?
@@ -616,18 +606,14 @@ struct HistoryPayload: Encodable
     /// The smallest value range a chart shows, so sensor noise doesn't look like a swing.
     var minimumSpan: Double
     var nonNegative: Bool
-    /// The highest value a chart shows. Nil when there's no limit.
-    var maximum: Double?
-    /// Whether the page shows the low and high, above the chart and in a daily table.
-    var showsLowHigh: Bool
-    /// The lowest reading in the last 7 days, in `unit`. Nil when the page shows no low and high.
-    var low: Double?
-    /// The highest reading in the last 7 days, in `unit`. Nil when the page shows no low and high.
-    var high: Double?
+    /// The lowest reading in the last 7 days, in `unit`.
+    var low: Double
+    /// The highest reading in the last 7 days, in `unit`.
+    var high: Double
     /// [seconds since 1970, value in `unit`] pairs, oldest first.
     var points: [[Double]]
-    /// The low, high, and average of each day, oldest first, for the daily table. Nil when the page shows no low and high.
-    var days: [Day]?
+    /// The low, high, and average of each day, oldest first, for the daily table.
+    var days: [Day]
   }
 
   /// The low, high, and average of one full day, or of today since midnight, in the series' unit.
@@ -659,32 +645,8 @@ struct ChartStyle
   var decimals: Int
   var minimumSpan: Double
   var nonNegative = true
-  var maximum: Double?
-  var showsLowHigh = true
   /// Set for temperatures, which HomeKit reports in Celsius.
   var temperatureUnit: UnitTemperature?
-
-  init?(quantity: ReadingHistory.Quantity, temperatureUnit: UnitTemperature)
-  {
-    switch quantity
-    {
-    case .reading(let kind):
-      self.init(kind: kind, temperatureUnit: temperatureUnit)
-    case .battery:
-      // A battery only runs down, so its low and high would only repeat the chart.
-      self.init(name: "Battery", unit: "%", decimals: 0, minimumSpan: 10, maximum: 100, showsLowHigh: false)
-    }
-  }
-
-  private init(name: String, unit: String, decimals: Int, minimumSpan: Double, maximum: Double, showsLowHigh: Bool)
-  {
-    self.name = name
-    self.unit = unit
-    self.decimals = decimals
-    self.minimumSpan = minimumSpan
-    self.maximum = maximum
-    self.showsLowHigh = showsLowHigh
-  }
 
   init?(kind: Reading.Kind, temperatureUnit: UnitTemperature)
   {
@@ -820,15 +782,6 @@ extension ReadingHistory
         {
           time in
           demoValue(reading.kind, base: base, time: time, seed: Double(index))
-        }
-      }
-      if let level = device.battery?.level
-      {
-        // Three percent over the week, in whole-percent steps.
-        seeded[Key(device: device.id, quantity: .battery)] = samples
-        {
-          time in
-          min(100, (Double(level) + 3 * (now - time) / window).rounded())
         }
       }
     }

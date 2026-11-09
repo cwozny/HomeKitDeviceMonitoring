@@ -192,16 +192,16 @@ struct ReadingHistoryTests
     let windowStart = now - ReadingHistory.window
     let history = ReadingHistory(fileURL: nil)
     // The lowest humidity of the first day is in its morning, before the 7 days start.
-    history.record([sensor(temperature: 20, humidity: 30, battery: 90)], at: calendar.startOfDay(for: windowStart) + 6 * 3_600)
-    history.record([sensor(temperature: 20, humidity: 50, battery: 90)], at: windowStart + 3_600)
-    history.record([sensor(temperature: 20, humidity: 60, battery: 90)], at: now - 3_600)
+    history.record([sensor(temperature: 20, humidity: 30)], at: calendar.startOfDay(for: windowStart) + 6 * 3_600)
+    history.record([sensor(temperature: 20, humidity: 50)], at: windowStart + 3_600)
+    history.record([sensor(temperature: 20, humidity: 60)], at: now - 3_600)
     let payload = try decode(history.payload(at: now))
     let humidities = payload.series.filter
     {
       $0.kind == "humidity"
     }
     let humidity = try #require(humidities.first)
-    let days = try #require(humidity.days)
+    let days = humidity.days
     #expect(days.map(\.date) == ["2026-03-13", "2026-03-20"])
     #expect(days[0].low == 30)
     #expect(days[0].high == 50)
@@ -209,14 +209,6 @@ struct ReadingHistoryTests
     #expect(days[1].low == 60)
     // The chart still starts when the 7 days start.
     #expect(humidity.points.count == 2)
-    // The page shows no low and high for the battery level.
-    let batteries = payload.series.filter
-    {
-      $0.kind == "battery"
-    }
-    let battery = try #require(batteries.first)
-    #expect(battery.days == nil)
-    #expect(battery.low == nil)
   }
 
   @Test("Gives the lowest and highest readings, not the lowest and highest 10-minute averages")
@@ -238,7 +230,7 @@ struct ReadingHistoryTests
     #expect(humidity.points.first?.last == 40)
     #expect(humidity.low == 30)
     #expect(humidity.high == 50)
-    let day = try #require(humidity.days?.last)
+    let day = try #require(humidity.days.last)
     #expect(day.low == 30)
     #expect(day.high == 50)
     #expect(day.average == 40)
@@ -270,8 +262,8 @@ struct ReadingHistoryTests
     #expect(archived == [lines[0]])
   }
 
-  @Test("Saves the battery level and charts it last, up to 100 percent and without a low and high")
-  func chartsBatteryLevel() throws
+  @Test("Saves the battery level in the file, but the History view has no chart of it")
+  func savesBatteryLevelWithoutChart() throws
   {
     let file = temporaryFile()
     defer
@@ -279,27 +271,25 @@ struct ReadingHistoryTests
       try? FileManager.default.removeItem(at: file)
     }
     ReadingHistory(fileURL: file).record([sensor(temperature: 20, humidity: 50, battery: 95)], at: start)
+    let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map(String.init)
+    #expect(lines.contains("\(Int(start.timeIntervalSince1970))\t\(deviceID.uuidString)\tbattery\t95.0"))
     let payload = try decode(ReadingHistory(fileURL: file).payload(at: start + 3_600))
-    #expect(payload.series.map(\.kind) == ["temperature", "humidity", "battery"])
-    let battery = try #require(payload.series.last)
-    #expect(battery.unit == "%")
-    #expect(battery.maximum == 100)
-    #expect(!battery.showsLowHigh)
-    #expect(battery.points == [[start.timeIntervalSince1970, 95]])
-    let temperature = try #require(payload.series.first)
-    #expect(temperature.maximum == nil)
-    #expect(temperature.showsLowHigh)
+    #expect(payload.series.map(\.kind) == ["temperature", "humidity"])
   }
 
   @Test("Lists the series by kind in chart order, then by device, so the page's filter keeps that order")
   func listsSeriesByKind() throws
   {
-    // This device sorts first by its ID, so listing by device first would put its battery level first.
-    let door = makeDevice("Door sensor", id: try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000000")), battery: Battery(level: 90))
+    // This device sorts first by its ID, so listing by device first would put its humidity first.
+    let bathroom = makeDevice(
+      "Bathroom sensor",
+      id: try #require(UUID(uuidString: "00000000-0000-0000-0000-000000000000")),
+      readings: [Reading(kind: .humidity, value: 60)]
+    )
     let history = ReadingHistory(fileURL: nil)
-    history.record([door, sensor(temperature: 20, humidity: 50, battery: 95)], at: start)
+    history.record([bathroom, sensor(temperature: 20, humidity: 50)], at: start)
     let payload = try decode(history.payload(at: start + 3_600))
-    #expect(payload.series.map(\.kind) == ["temperature", "humidity", "battery", "battery"])
+    #expect(payload.series.map(\.kind) == ["temperature", "humidity", "humidity"])
   }
 
   @Test("Gives the same points whenever the page asks, because buckets follow the clock")
@@ -400,12 +390,10 @@ private struct DecodedPayload: Decodable
   {
     var kind: String
     var unit: String
-    var maximum: Double?
-    var showsLowHigh: Bool
-    var low: Double?
-    var high: Double?
+    var low: Double
+    var high: Double
     var points: [[Double]]
-    var days: [Day]?
+    var days: [Day]
   }
 
   struct Day: Decodable
