@@ -1223,7 +1223,7 @@
       });
       if (charted.length === 0 || typeof historyData.recordingSince !== "number")
       {
-        container.append(element("p", "message", "Nothing recorded yet. Charts appear here as devices report temperature, humidity, light, or battery level."));
+        container.append(element("p", "message", "Nothing recorded yet. Charts appear here as devices report readings, such as temperature, humidity, and light."));
         return container;
       }
       const since = Math.max(historyData.start, historyData.recordingSince);
@@ -1296,7 +1296,7 @@
       figure.dataset.key = key;
       figure.tabIndex = 0;
       figure.setAttribute("role", "group");
-      const range = series.showsLowHigh ? ": low " + withUnit(low, series) + ", high " + withUnit(high, series) : "";
+      const range = ": low " + withUnit(low, series) + ", high " + withUnit(high, series);
       figure.setAttribute("aria-label", device.name + " " + series.name.toLowerCase() + " " + period + range + ". Use the arrow keys to read values.");
       const tip = element("div", "chart-tip");
       tip.hidden = true;
@@ -1320,15 +1320,9 @@
         stepPoint(figure, event);
       });
       block.append(head);
-      if (series.showsLowHigh)
-      {
-        block.append(element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)));
-      }
+      block.append(element("div", "chart-range", "Low " + withUnit(low, series) + " · High " + withUnit(high, series)));
       block.append(figure);
-      if (series.showsLowHigh)
-      {
-        block.append(renderTable(series, key));
-      }
+      block.append(renderTable(series, key));
       return block;
     }
 
@@ -1336,10 +1330,6 @@
     // a carbon dioxide sensor has both a "detected" reading and a level reading.
     function liveText(device, series)
     {
-      if (series.kind === "battery" && device.battery && typeof device.battery.level === "number")
-      {
-        return device.battery.text;
-      }
       for (const reading of device.readings)
       {
         if (reading.kind === series.kind)
@@ -1386,7 +1376,7 @@
       const details = element("details", "table-view");
       details.dataset.key = chartKey;
       details.append(element("summary", null, "Daily low and high"));
-      const days = series.days || [];
+      const days = series.days;
       const headRow = element("tr");
       for (const label of ["Day", "Low", "High", "Average"])
       {
@@ -1463,11 +1453,6 @@
       {
         high -= low;
         low = 0;
-      }
-      if (typeof series.maximum === "number" && high > series.maximum)
-      {
-        low -= high - series.maximum;
-        high = series.maximum;
       }
       const scale = niceScale(low, high);
       const decimals = stepDecimals(scale.step);
