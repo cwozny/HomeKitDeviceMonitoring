@@ -5,7 +5,7 @@ import Testing
 @Suite("Host-name check")
 struct HostCheckTests
 {
-  @Test("Allows addresses, localhost, Bonjour names, and Tailscale names", arguments: [
+  @Test("Allows addresses, localhost, and Bonjour names", arguments: [
     "localhost",
     "127.0.0.1",
     "192.168.1.20",
@@ -13,18 +13,19 @@ struct HostCheckTests
     "::1",
     "fe80::1",
     "studio-mac.local",
-    "studio-mac.example-tailnet.ts.net",
-    "studio-mac",
   ])
   func allowsLocalNames(host: String)
   {
     #expect(WebRouter.allows(host: host))
   }
 
-  @Test("Refuses public names, which DNS rebinding needs", arguments: [
+  @Test("Refuses public names and names without a dot, which DNS rebinding needs", arguments: [
+    // A short name, which a DNS search domain can complete.
+    "studio-mac",
     "example.com",
     "attacker.example",
-    "studio-mac.ts.net.attacker.example",
+    // A VPN name is refused unless the build settings list it.
+    "studio-mac.example-vpn.net",
     "local.example.com",
     "localhost.example.com",
     "192.168.1.20.example.com",
@@ -68,6 +69,24 @@ struct HostCheckTests
     #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "other-mac.lan")).status == "403 Forbidden")
   }
 
+  @Test("Accepts the extra host names from the build settings, and no others")
+  func acceptsExtraHosts()
+  {
+    let router = makeRouter(extraHosts: ["studio-mac.example-vpn.net"])
+    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "studio-mac.example-vpn.net")).status == "200 OK")
+    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "other-mac.example-vpn.net")).status == "403 Forbidden")
+    #expect(router.response(for: HTTPServer.Request(method: "GET", path: "/", host: "studio-mac.example-vpn.net.attacker.example")).status == "403 Forbidden")
+  }
+
+  @Test("Reads the extra host names from the build setting without case, spaces, or a trailing dot")
+  func readsExtraHostNames()
+  {
+    let names = WebRouter.hostNames(from: "  Studio-Mac.Example-VPN.net   other-mac.example-vpn.net. ")
+    #expect(names == ["studio-mac.example-vpn.net", "other-mac.example-vpn.net"])
+    #expect(WebRouter.hostNames(from: "").isEmpty)
+    #expect(WebRouter.hostNames(from: nil).isEmpty)
+  }
+
   @Test("Names the allowed method when it refuses one")
   func allowedMethod()
   {
@@ -77,9 +96,14 @@ struct HostCheckTests
     #expect(delete.allow == "GET")
   }
 
-  private func makeRouter(advertisedHost: String? = nil) -> WebRouter
+  private func makeRouter(advertisedHost: String? = nil, extraHosts: Set<String> = []) -> WebRouter
   {
-    WebRouter(content: WebContent(page: Data("<!doctype html>".utf8)), history: ReadingHistory(fileURL: nil), advertisedHost: advertisedHost)
+    WebRouter(
+      content: WebContent(page: Data("<!doctype html>".utf8)),
+      history: ReadingHistory(fileURL: nil),
+      advertisedHost: advertisedHost,
+      extraHosts: extraHosts
+    )
   }
 }
 

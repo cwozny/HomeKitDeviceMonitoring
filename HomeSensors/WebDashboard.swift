@@ -38,7 +38,8 @@ final class WebDashboard
     let history = ReadingHistory.forLaunch()
     self.history = history
     publish()
-    let router = WebRouter(content: content, history: history, advertisedHost: hostName)
+    let extraHosts = WebRouter.hostNames(from: Bundle.main.object(forInfoDictionaryKey: "HomeSensorsAllowedHosts") as? String)
+    let router = WebRouter(content: content, history: history, advertisedHost: hostName, extraHosts: extraHosts)
     server = HTTPServer(port: Self.port, handler: router.response(for:))
     listen()
     // App Nap would throttle the app while its window is hidden; a server must answer promptly.
@@ -163,12 +164,15 @@ struct WebRouter
   let history: ReadingHistory
   /// The host name in the address the app shows, which can be off the allowlist, for example "studio-mac.lan".
   var advertisedHost: String? = nil
+  /// More host names that the server accepts, for example a VPN name. They come from the build setting
+  /// HOME_SENSORS_ALLOWED_HOSTS, which Support/Signing.xcconfig describes.
+  var extraHosts: Set<String> = []
 
   func response(for request: HTTPServer.Request) -> HTTPServer.Response
   {
-    guard let host = request.host, host == advertisedHost || Self.allows(host: host) else
+    guard let host = request.host, host == advertisedHost || extraHosts.contains(host) || Self.allows(host: host) else
     {
-      return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or a Tailscale name.")
+      return .text("403 Forbidden", "Home Sensors answers only requests to an IP address, localhost, a .local name, or an extra host name from its build settings.")
     }
     switch (request.method, request.path)
     {
@@ -193,11 +197,30 @@ struct WebRouter
     {
       return true
     }
-    // Single-label names, such as Tailscale's short machine names, don't come from public DNS.
-    if !host.contains(".")
+
+    // A name without a dot isn't allowed. A browser can complete it with a DNS search domain,
+    // and the owner of that domain can make it point to this Mac.
+    return host.hasSuffix(".local")
+  }
+
+  /// The host names in a build setting, separated by spaces, in the form of `HTTPServer.Request.host`.
+  static func hostNames(from setting: String?) -> Set<String>
+  {
+    var names: Set<String> = []
+    for word in (setting ?? "").split(whereSeparator: \.isWhitespace)
     {
-      return true
+      var name = word.lowercased()
+      if name.hasSuffix(".")
+      {
+        name.removeLast()
+      }
+
+      if !name.isEmpty
+      {
+        names.insert(name)
+      }
     }
-    return host.hasSuffix(".local") || host.hasSuffix(".ts.net")
+
+    return names
   }
 }
