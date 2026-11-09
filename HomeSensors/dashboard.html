@@ -1288,13 +1288,9 @@
       const current = element("span", "chart-value", liveText(device, series));
       head.append(element("span", "chart-title", series.name), current);
       liveValues.push({ id: device.id, series: series, node: current });
-      let low = Infinity;
-      let high = -Infinity;
-      for (const point of series.points)
-      {
-        low = Math.min(low, point[1]);
-        high = Math.max(high, point[1]);
-      }
+      // The lowest and highest readings. The line shows 10-minute averages, so it can stay between them.
+      const low = series.low;
+      const high = series.high;
       const key = device.id + "/" + series.kind;
       const figure = element("figure", "chart");
       figure.dataset.key = key;
