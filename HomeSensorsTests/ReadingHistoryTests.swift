@@ -74,8 +74,35 @@ struct ReadingHistoryTests
     #expect(abs(temperature.points[0][1] - (average * 10).rounded() / 10) < 0.001)
   }
 
-  @Test("Moves readings from before the first of the 7 days to the archive and drops damaged lines when it loads the file")
+  @Test("Moves readings from before the first of the 7 days to the archive and damaged lines to the rejected file when it loads the file")
   func archivesOldLinesWhenLoading() throws
+  {
+    let file = temporaryFile()
+    let archive = temporaryFile()
+    let rejected = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: archive)
+      try? FileManager.default.removeItem(at: rejected)
+    }
+    ReadingHistory(fileURL: file, archiveURL: archive).record([sensor(temperature: 20, humidity: 50)], at: start)
+    let old = "\(Int(Date.now.timeIntervalSince1970 - 9 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5"
+    let handle = try FileHandle(forWritingTo: file)
+    _ = try handle.seekToEnd()
+    try handle.write(contentsOf: Data((old + "\nnot a reading\n").utf8))
+    try handle.close()
+    _ = ReadingHistory(fileURL: file, archiveURL: archive, rejectedURL: rejected)
+    let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    #expect(lines.count == 2)
+    let archived = try String(contentsOf: archive, encoding: .utf8).split(separator: "\n")
+    #expect(archived.map(String.init) == [old])
+    let moved = try String(contentsOf: rejected, encoding: .utf8).split(separator: "\n")
+    #expect(moved.map(String.init) == ["not a reading"])
+  }
+
+  @Test("Keeps the lines that it can't use in the history file when it can't write the rejected file")
+  func keepsUnusableLinesWhenRejectedFileFails() throws
   {
     let file = temporaryFile()
     let archive = temporaryFile()
@@ -84,17 +111,50 @@ struct ReadingHistoryTests
       try? FileManager.default.removeItem(at: file)
       try? FileManager.default.removeItem(at: archive)
     }
-    ReadingHistory(fileURL: file, archiveURL: archive).record([sensor(temperature: 20, humidity: 50)], at: start)
-    let old = "\(Int(Date.now.timeIntervalSince1970 - 9 * 86_400))\t\(deviceID.uuidString)\ttemperature\t19.5"
-    let handle = try FileHandle(forWritingTo: file)
-    _ = try handle.seekToEnd()
-    try handle.write(contentsOf: Data((old + "\nnot a reading\n").utf8))
-    try handle.close()
-    _ = ReadingHistory(fileURL: file, archiveURL: archive)
-    let lines = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
-    #expect(lines.count == 2)
-    let archived = try String(contentsOf: archive, encoding: .utf8).split(separator: "\n")
-    #expect(archived.map(String.init) == [old])
+
+    // In a folder that doesn't exist, so the rejected file can't be written.
+    let rejected = FileManager.default.temporaryDirectory.appendingPathComponent("HomeSensorsTests-\(UUID().uuidString)/rejected.tsv")
+    let line = "\(Int(start.timeIntervalSince1970))\t\(deviceID.uuidString)\thumidity\t50"
+    try Data((line + "\nnot a reading\n").utf8).write(to: file)
+    let history = ReadingHistory(fileURL: file, archiveURL: archive, rejectedURL: rejected)
+    // Nine days later, the 6-hourly cleanup rewrites the history file.
+    history.record([sensor(temperature: 21, humidity: 51)], at: start + 9 * 86_400)
+    let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n").map(String.init)
+    #expect(kept.contains("not a reading"))
+    #expect(kept.count == 3)
+    #expect(!FileManager.default.fileExists(atPath: rejected.path))
+  }
+
+  @Test("Moves a history file that it can't read aside, so a rewrite can't replace it")
+  func setsUnreadableFileAside() throws
+  {
+    let folder = FileManager.default.temporaryDirectory.appendingPathComponent("HomeSensorsTests-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    defer
+    {
+      try? FileManager.default.removeItem(at: folder)
+    }
+
+    let file = folder.appendingPathComponent("history.tsv")
+    let original = Data("\(Int(start.timeIntervalSince1970))\t\(deviceID.uuidString)\thumidity\t50\n".utf8)
+    try original.write(to: file)
+    try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: file.path)
+    let history = ReadingHistory(fileURL: file, archiveURL: folder.appendingPathComponent("archive.tsv"))
+    history.record([sensor(temperature: 21, humidity: 51)], at: start + 60)
+    // Nine days later, the 6-hourly cleanup rewrites the history file.
+    history.record([sensor(temperature: 22, humidity: 52)], at: start + 9 * 86_400)
+    let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+    let unreadable = names.filter
+    {
+      $0.hasPrefix("history-unreadable-") && $0.hasSuffix(".tsv")
+    }
+    #expect(unreadable.count == 1)
+    let moved = folder.appendingPathComponent(try #require(unreadable.first))
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: moved.path)
+    let movedData = try Data(contentsOf: moved)
+    #expect(movedData == original)
+    let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    #expect(kept.count == 2)
   }
 
   @Test("Keeps samples from before the first of the 7 days when it can't write the archive, so a later cleanup can try again")
@@ -304,13 +364,15 @@ struct ReadingHistoryTests
     #expect(first == later)
   }
 
-  @Test("Ignores lines with values or times it can't use when it loads the file")
-  func ignoresUnusableLines() throws
+  @Test("Moves lines with values, times, or kinds that it can't use to the rejected file when it loads the file")
+  func rejectsUnusableLines() throws
   {
     let file = temporaryFile()
+    let rejected = temporaryFile()
     defer
     {
       try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: rejected)
     }
     let time = Int(start.timeIntervalSince1970)
     let device = deviceID.uuidString
@@ -321,12 +383,105 @@ struct ReadingHistoryTests
       "\(time + 180)\t\(device)\thumidity\t1e400",
       "inf\t\(device)\thumidity\t51",
       "\(Int(Date.now.timeIntervalSince1970) + 86_400)\t\(device)\thumidity\t52",
+      // A kind from a newer version of the app.
+      "\(time + 240)\t\(device)\tpressure\t1013",
     ]
     try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file)
-    let points = try decode(ReadingHistory(fileURL: file).payload(at: start + 3_600)).series.map(\.points)
+    let points = try decode(ReadingHistory(fileURL: file, rejectedURL: rejected).payload(at: start + 3_600)).series.map(\.points)
     #expect(points == [[[Double(time), 50]]])
     let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
     #expect(kept.count == 1)
+    let moved = try String(contentsOf: rejected, encoding: .utf8).split(separator: "\n").map(String.init)
+    #expect(moved == Array(lines.dropFirst()))
+  }
+
+  @Test("Reads a file with Windows line endings")
+  func readsWindowsLineEndings() throws
+  {
+    let file = temporaryFile()
+    let rejected = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: rejected)
+    }
+
+    let time = Int(start.timeIntervalSince1970)
+    let device = deviceID.uuidString
+    let lines = [
+      "\(time)\t\(device)\thumidity\t50",
+      "\(time + 600)\t\(device)\thumidity\t51",
+    ]
+    try Data((lines.joined(separator: "\r\n") + "\r\n").utf8).write(to: file)
+    let points = try decode(ReadingHistory(fileURL: file, rejectedURL: rejected).payload(at: start + 3_600)).series.map(\.points)
+    #expect(points == [[[Double(time), 50], [Double(time + 600), 51]]])
+    #expect(!FileManager.default.fileExists(atPath: rejected.path))
+  }
+
+  @Test("Keeps the other lines when a line has a damaged byte, and moves that line to the rejected file as it was")
+  func keepsLinesAroundDamagedByte() throws
+  {
+    let file = temporaryFile()
+    let rejected = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: rejected)
+    }
+
+    let time = Int(start.timeIntervalSince1970)
+    let device = deviceID.uuidString
+    // 0xFF can't be in UTF-8 text.
+    var damaged = Data("\(time + 60)\t\(device)\thumidity\t5".utf8)
+    damaged.append(0xFF)
+    var data = Data("\(time)\t\(device)\thumidity\t50\n".utf8)
+    data.append(damaged)
+    data.append(Data("\n\(time + 600)\t\(device)\thumidity\t51\n".utf8))
+    try data.write(to: file)
+    let points = try decode(ReadingHistory(fileURL: file, rejectedURL: rejected).payload(at: start + 3_600)).series.map(\.points)
+    #expect(points == [[[Double(time), 50], [Double(time + 600), 51]]])
+    var expected = damaged
+    expected.append(UInt8(ascii: "\n"))
+    let moved = try Data(contentsOf: rejected)
+    #expect(moved == expected)
+  }
+
+  @Test("Starts new lines on a line of their own when the file ends in a part of a line")
+  func appendsAfterPartOfLine() throws
+  {
+    let file = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+    }
+
+    try Data("a\npart".utf8).write(to: file)
+    #expect(ReadingHistory.appendLines(Data("b\n".utf8), to: file))
+    // A file that ends with a line break gets no empty line.
+    #expect(ReadingHistory.appendLines(Data("c\n".utf8), to: file))
+    let text = try String(contentsOf: file, encoding: .utf8)
+    #expect(text == "a\npart\nb\nc\n")
+  }
+
+  @Test("Cuts off a write that fails partway, so no part of a line stays in the file")
+  func cutsOffFailedWrite() throws
+  {
+    let file = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+    }
+
+    try Data("a\n".utf8).write(to: file)
+    let added = ReadingHistory.appendLines(Data("bbbb\n".utf8), to: file)
+    {
+      handle, data in
+      try handle.write(contentsOf: data.prefix(2))
+      throw CocoaError(.fileWriteOutOfSpace)
+    }
+    #expect(!added)
+    let text = try String(contentsOf: file, encoding: .utf8)
+    #expect(text == "a\n")
   }
 
   @Test("Keeps recording after the clock goes back")
@@ -343,6 +498,35 @@ struct ReadingHistoryTests
     }
     let humidity = try #require(humidities.first)
     #expect(humidity.points == [[start.timeIntervalSince1970 + 600, 55]])
+  }
+
+  @Test("Moves the samples from the future to the rejected file when the clock goes back")
+  func rejectsFutureSamplesAfterClockGoesBack() throws
+  {
+    let file = temporaryFile()
+    let rejected = temporaryFile()
+    defer
+    {
+      try? FileManager.default.removeItem(at: file)
+      try? FileManager.default.removeItem(at: rejected)
+    }
+
+    let history = ReadingHistory(fileURL: file, rejectedURL: rejected)
+    history.record([sensor(temperature: 20, humidity: 50)], at: start + 1_200)
+    history.record([sensor(temperature: 20, humidity: 55)], at: start + 600)
+    let moved = try String(contentsOf: rejected, encoding: .utf8).split(separator: "\n")
+    let kept = try String(contentsOf: file, encoding: .utf8).split(separator: "\n")
+    #expect(moved.count == 2)
+    #expect(kept.count == 2)
+    for line in moved
+    {
+      #expect(line.hasPrefix("\(Int(start.timeIntervalSince1970) + 1_200)\t"))
+    }
+
+    for line in kept
+    {
+      #expect(line.hasPrefix("\(Int(start.timeIntervalSince1970) + 600)\t"))
+    }
   }
 
   @Test("The page data names each reading's history series, because a level and its detected flag share a name")

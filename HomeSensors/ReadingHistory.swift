@@ -1,8 +1,10 @@
 import Foundation
+import os
 
 /// Records numeric sensor readings and battery levels. The web page charts the readings of the last 7 days.
 /// The daily low and high are for full days, so the samples of the whole first day of the 7 stay too.
-/// Older samples move to an archive file, which the app only appends to, so none are lost.
+/// Older samples move to an archive file, and lines that the app can't use move to a rejected file.
+/// The app only appends to those two files, so no sample is lost.
 /// HomeKit keeps no history, so the record starts when the app first runs.
 /// Recording happens on the main actor; the web server reads payloads on its own queue.
 final class ReadingHistory: @unchecked Sendable
@@ -62,20 +64,31 @@ final class ReadingHistory: @unchecked Sendable
   private static let heartbeat: TimeInterval = 10 * 60
   private static let pruneInterval: TimeInterval = 6 * 60 * 60
 
-  private let fileURL: URL?
+  /// Nil when the history is in memory only, also after a file that can't be read couldn't move aside.
+  private var fileURL: URL?
   /// Receives the samples from before the first day of the 7 days. Without it, they're deleted.
   private let archiveURL: URL?
+  /// Receives the lines that the app can't use, such as damaged lines. Without it, they stay in the history file.
+  private let rejectedURL: URL?
   private let lock = NSLock()
   private var series: [Key: [Sample]] = [:]
   /// When the app recorded its first sample. That sample can be in the archive.
   private var firstRecorded: TimeInterval?
+  /// Lines that the app can't use and couldn't move to the rejected file, each with its line break.
+  /// Each rewrite keeps them in the history file, and each cleanup tries to move them again.
+  private var unmoved = Data()
   private var lastPrune: TimeInterval
   private var isFrozen = false
 
-  init(fileURL: URL?, archiveURL: URL? = nil)
+  /// Records problems with the history files. To read them on the host:
+  /// /usr/bin/log show --predicate 'subsystem == "<bundle ID>" && category == "History"' --last 1d
+  private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HomeSensors", category: "History")
+
+  init(fileURL: URL?, archiveURL: URL? = nil, rejectedURL: URL? = nil)
   {
     self.fileURL = fileURL
     self.archiveURL = archiveURL
+    self.rejectedURL = rejectedURL
     lastPrune = Date.now.timeIntervalSince1970
     load()
   }
@@ -91,11 +104,12 @@ final class ReadingHistory: @unchecked Sendable
     let folder = defaultFolder()
     return ReadingHistory(
       fileURL: folder?.appendingPathComponent("history.tsv"),
-      archiveURL: folder?.appendingPathComponent("history-archive.tsv")
+      archiveURL: folder?.appendingPathComponent("history-archive.tsv"),
+      rejectedURL: folder?.appendingPathComponent("history-rejected.tsv")
     )
   }
 
-  /// ~/Library/Application Support/<bundle ID>, which holds history.tsv and history-archive.tsv.
+  /// ~/Library/Application Support/<bundle ID>, which holds history.tsv, history-archive.tsv, and history-rejected.tsv.
   private static func defaultFolder() -> URL?
   {
     let manager = FileManager.default
@@ -131,6 +145,7 @@ final class ReadingHistory: @unchecked Sendable
     }
     let now = date.timeIntervalSince1970
     var added: [(Key, Sample)] = []
+    var future: [(Key, Sample)] = []
     lock.withLock
     {
       for device in devices where device.isReachable
@@ -138,13 +153,23 @@ final class ReadingHistory: @unchecked Sendable
         for (quantity, value) in Self.recordedValues(of: device)
         {
           let key = Key(device: device.id, quantity: quantity)
-          if let last = series[key]?.last, last.time > now
+          if let samples = series[key], let last = samples.last, last.time > now
           {
             // The clock went back. Samples from the future would stop recording until it caught up.
-            series[key] = series[key]?.filter
+            var kept: [Sample] = []
+            for sample in samples
             {
-              $0.time <= now
+              if sample.time > now
+              {
+                future.append((key, sample))
+              }
+              else
+              {
+                kept.append(sample)
+              }
             }
+
+            series[key] = kept
           }
           if let last = series[key]?.last
           {
@@ -163,6 +188,25 @@ final class ReadingHistory: @unchecked Sendable
       }
     }
     append(added, to: fileURL)
+    if !future.isEmpty
+    {
+      // They leave the history file, but they aren't deleted.
+      if reject(Self.lines(future))
+      {
+        Self.logger.error("The clock went back. \(future.count) samples from the future moved to the rejected file.")
+      }
+      else
+      {
+        Self.logger.error("The clock went back. \(future.count) samples from the future stay in the history file, because they can't move to a rejected file.")
+      }
+
+      let current = lock.withLock
+      {
+        series
+      }
+      rewrite(current)
+    }
+
     if now - lastPrune >= Self.pruneInterval
     {
       prune(now: now)
@@ -384,19 +428,49 @@ final class ReadingHistory: @unchecked Sendable
 
   private func load()
   {
-    guard let fileURL, let text = try? String(contentsOf: fileURL, encoding: .utf8) else
+    guard let fileURL else
     {
       return
     }
+
     let now = Date.now.timeIntervalSince1970
+    let data: Data
+    do
+    {
+      data = try Data(contentsOf: fileURL)
+    }
+    catch
+    {
+      // No file yet, or one that can't be read. That one moves aside, so a rewrite can't replace it.
+      if FileManager.default.fileExists(atPath: fileURL.path)
+      {
+        setAside(fileURL, readError: error, now: now)
+      }
+
+      return
+    }
+
     let cutoff = Self.startOfFirstDay(now)
     var loaded: [Key: [Sample]] = [:]
     var old: [(Key, Sample)] = []
     var first = Self.firstTime(in: archiveURL, now: now)
-    var dropped = 0
-    for line in text.split(separator: "\n")
+    var rejected = Data()
+    var rejectedCount = 0
+    // Line by line, so a damaged byte affects only its own line. A line can also end in a carriage return.
+    for rawLine in data.split(separator: UInt8(ascii: "\n"))
     {
-      let fields = line.split(separator: "\t")
+      var line = rawLine
+      if line.last == UInt8(ascii: "\r")
+      {
+        line = line.dropLast()
+      }
+
+      if line.isEmpty
+      {
+        continue
+      }
+
+      let fields = String(decoding: line, as: UTF8.self).split(separator: "\t")
       // Double() also reads "nan", "inf", and overflows such as "1e400", which a damaged file could hold.
       // Those can't be converted to Int or encoded as JSON, and a future time would stop recording.
       guard fields.count == 4,
@@ -409,9 +483,13 @@ final class ReadingHistory: @unchecked Sendable
         time <= now
       else
       {
-        dropped += 1
+        // A damaged line, a kind that this version doesn't know, or a time in the future.
+        rejected.append(rawLine)
+        rejected.append(UInt8(ascii: "\n"))
+        rejectedCount += 1
         continue
       }
+
       let key = Key(device: device, quantity: quantity)
       let sample = Sample(time: time, value: value)
       first = min(first ?? time, time)
@@ -446,9 +524,44 @@ final class ReadingHistory: @unchecked Sendable
       series = loaded
       firstRecorded = first
     }
-    if dropped > 0 || (archived && !old.isEmpty)
+    var movedRejected = false
+    if rejectedCount > 0
+    {
+      movedRejected = reject(rejected)
+      if movedRejected
+      {
+        Self.logger.error("Moved \(rejectedCount) lines that the app can't use from \(fileURL.lastPathComponent, privacy: .public) to the rejected file.")
+      }
+      else
+      {
+        Self.logger.error("Kept \(rejectedCount) lines that the app can't use in \(fileURL.lastPathComponent, privacy: .public), because they can't move to a rejected file.")
+      }
+    }
+
+    if movedRejected || (archived && !old.isEmpty)
     {
       rewrite(loaded)
+    }
+  }
+
+  /// Moves a history file that can't be read out of the way, so a rewrite can't replace it. The app then starts a new file.
+  /// If the file can't move, the app leaves it alone and keeps the history in memory only.
+  private func setAside(_ url: URL, readError: Error, now: TimeInterval)
+  {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd-HHmmss"
+    let stamp = formatter.string(from: Date(timeIntervalSince1970: now))
+    let name = url.deletingPathExtension().lastPathComponent + "-unreadable-" + stamp + "." + url.pathExtension
+    do
+    {
+      try FileManager.default.moveItem(at: url, to: url.deletingLastPathComponent().appendingPathComponent(name))
+      Self.logger.error("Couldn't read \(url.lastPathComponent, privacy: .public), so it moved to \(name, privacy: .public): \(readError.localizedDescription, privacy: .public)")
+    }
+    catch
+    {
+      fileURL = nil
+      Self.logger.error("Couldn't read or move \(url.lastPathComponent, privacy: .public), so the history stays in memory only: \(error.localizedDescription, privacy: .public)")
     }
   }
 
@@ -491,7 +604,7 @@ final class ReadingHistory: @unchecked Sendable
     return append(sorted, to: archiveURL)
   }
 
-  /// False if the samples couldn't be written.
+  /// False if the samples couldn't be written. Then only these samples are missing from this file, and recording continues.
   @discardableResult
   private func append(_ entries: [(Key, Sample)], to url: URL?) -> Bool
   {
@@ -499,32 +612,75 @@ final class ReadingHistory: @unchecked Sendable
     {
       return true
     }
-    let data = Self.lines(entries)
-    guard let handle = try? FileHandle(forWritingTo: url) else
+
+    return Self.appendLines(Self.lines(entries), to: url)
+  }
+
+  /// Moves lines that the app can't use to the rejected file. If they can't move, each rewrite keeps them in the history file.
+  /// True if they moved.
+  @discardableResult
+  private func reject(_ lines: Data) -> Bool
+  {
+    if let rejectedURL, Self.appendLines(lines, to: rejectedURL)
     {
-      do
-      {
-        try data.write(to: url)
-        return true
-      }
-      catch
-      {
-        return false
-      }
+      return true
     }
+
+    unmoved.append(lines)
+    return false
+  }
+
+  /// Adds lines at the end of a file. False if they weren't added.
+  /// If the file doesn't end with a line break, for example after a crash, a line break comes first, so the new lines can't join a damaged line.
+  /// A write that fails is cut off again, so the file never ends in a part of a line.
+  static func appendLines(_ lines: Data, to url: URL) -> Bool
+  {
+    appendLines(lines, to: url)
+    {
+      handle, data in
+      try handle.write(contentsOf: data)
+    }
+  }
+
+  /// The same, with a write that a test can make fail.
+  static func appendLines(_ lines: Data, to url: URL, write: (FileHandle, Data) throws -> Void) -> Bool
+  {
+    guard let handle = try? FileHandle(forUpdating: url) else
+    {
+      // There's no file yet. A file that is there but can't be opened stays as it is.
+      return (try? lines.write(to: url, options: .withoutOverwriting)) != nil
+    }
+
     defer
     {
       try? handle.close()
     }
+
+    var end: UInt64?
     do
     {
-      _ = try handle.seekToEnd()
-      try handle.write(contentsOf: data)
+      let size = try handle.seekToEnd()
+      end = size
+      var data = lines
+      if size > 0
+      {
+        try handle.seek(toOffset: size - 1)
+        if try handle.read(upToCount: 1) != Data([UInt8(ascii: "\n")])
+        {
+          data.insert(UInt8(ascii: "\n"), at: data.startIndex)
+        }
+      }
+
+      try write(handle, data)
       return true
     }
     catch
     {
-      // Only these samples are lost from this file; recording continues.
+      if let end
+      {
+        try? handle.truncate(atOffset: end)
+      }
+
       return false
     }
   }
@@ -568,6 +724,14 @@ final class ReadingHistory: @unchecked Sendable
     {
       series = kept
     }
+    if !unmoved.isEmpty
+    {
+      // Another try for the lines that couldn't move to the rejected file.
+      let lines = unmoved
+      unmoved = Data()
+      reject(lines)
+    }
+
     rewrite(kept)
   }
 
@@ -589,7 +753,10 @@ final class ReadingHistory: @unchecked Sendable
     {
       $0.1.time < $1.1.time
     }
-    try? Self.lines(entries).write(to: fileURL, options: .atomic)
+    // The lines that couldn't move to the rejected file stay, at the start.
+    var data = unmoved
+    data.append(Self.lines(entries))
+    try? data.write(to: fileURL, options: .atomic)
   }
 }
 
