@@ -200,7 +200,7 @@ final class ReadingHistory: @unchecked Sendable
   }
 
   /// The JSON behind the History view: each series for the last 7 days, averaged into 10-minute buckets,
-  /// and the low and high of each full day.
+  /// its lowest and highest readings, and the low and high of each full day.
   func payload(at date: Date = .now) -> Data
   {
     let now = date.timeIntervalSince1970
@@ -229,15 +229,25 @@ final class ReadingHistory: @unchecked Sendable
         continue
       }
 
+      var low: Double?
+      var high: Double?
       var days: [HistoryPayload.Day]?
       if style.showsLowHigh
       {
+        // From the readings, because a 10-minute average hides a short low or high.
+        for sample in recent
+        {
+          let value = style.convert(sample.value)
+          low = min(low ?? value, value)
+          high = max(high ?? value, value)
+        }
+
         // The first day starts before the 7 days, and its low and high are for the full day too.
         let fullDays = samples.filter
         {
           $0.time >= firstDay
         }
-        days = Self.days(Self.buckets(fullDays, convert: style.convert))
+        days = Self.days(fullDays, convert: style.convert)
       }
 
       list.append(HistoryPayload.Series(
@@ -250,6 +260,8 @@ final class ReadingHistory: @unchecked Sendable
         nonNegative: style.nonNegative,
         maximum: style.maximum,
         showsLowHigh: style.showsLowHigh,
+        low: low,
+        high: high,
         points: Self.buckets(recent, convert: style.convert),
         days: days
       ))
@@ -306,41 +318,51 @@ final class ReadingHistory: @unchecked Sendable
     return points
   }
 
-  /// The low, high, and average of each day on the Mac's calendar, from the 10-minute averages, oldest first.
-  private static func days(_ points: [[Double]]) -> [HistoryPayload.Day]
+  /// The lowest and highest reading of each day on the Mac's calendar, and the average of its 10-minute averages, oldest first.
+  private static func days(_ samples: [Sample], convert: (Double) -> Double) -> [HistoryPayload.Day]
   {
     let calendar = Calendar.current
     var days: [HistoryPayload.Day] = []
-    var current: Date?
-    var low = 0.0
-    var high = 0.0
-    var sum = 0.0
-    var count = 0.0
+    var day = Date.distantPast
+    var nextDay = -Double.infinity
+    var daySamples: [Sample] = []
     func flush()
     {
-      if let current, count > 0
+      if daySamples.isEmpty
       {
-        days.append(HistoryPayload.Day(date: dateText(current, calendar), low: low, high: high, average: sum / count))
+        return
       }
+
+      var low = Double.infinity
+      var high = -Double.infinity
+      for sample in daySamples
+      {
+        let value = convert(sample.value)
+        low = min(low, value)
+        high = max(high, value)
+      }
+
+      let averages = buckets(daySamples, convert: convert)
+      var sum = 0.0
+      for point in averages
+      {
+        sum += point[1]
+      }
+
+      days.append(HistoryPayload.Day(date: dateText(day, calendar), low: low, high: high, average: sum / Double(averages.count)))
     }
 
-    for point in points
+    for sample in samples
     {
-      let day = calendar.startOfDay(for: Date(timeIntervalSince1970: point[0]))
-      if day != current
+      if sample.time >= nextDay
       {
         flush()
-        current = day
-        low = point[1]
-        high = point[1]
-        sum = 0
-        count = 0
+        day = calendar.startOfDay(for: Date(timeIntervalSince1970: sample.time))
+        nextDay = calendar.date(byAdding: .day, value: 1, to: day)?.timeIntervalSince1970 ?? .infinity
+        daySamples = []
       }
 
-      low = min(low, point[1])
-      high = max(high, point[1])
-      sum += point[1]
-      count += 1
+      daySamples.append(sample)
     }
 
     flush()
@@ -598,6 +620,10 @@ struct HistoryPayload: Encodable
     var maximum: Double?
     /// Whether the page shows the low and high, above the chart and in a daily table.
     var showsLowHigh: Bool
+    /// The lowest reading in the last 7 days, in `unit`. Nil when the page shows no low and high.
+    var low: Double?
+    /// The highest reading in the last 7 days, in `unit`. Nil when the page shows no low and high.
+    var high: Double?
     /// [seconds since 1970, value in `unit`] pairs, oldest first.
     var points: [[Double]]
     /// The low, high, and average of each day, oldest first, for the daily table. Nil when the page shows no low and high.
@@ -609,8 +635,11 @@ struct HistoryPayload: Encodable
   {
     /// The day on the Mac's calendar, such as "2026-11-01".
     var date: String
+    /// The lowest reading of the day.
     var low: Double
+    /// The highest reading of the day.
     var high: Double
+    /// The average of the day's 10-minute averages.
     var average: Double
   }
 

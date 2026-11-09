@@ -216,6 +216,32 @@ struct ReadingHistoryTests
     }
     let battery = try #require(batteries.first)
     #expect(battery.days == nil)
+    #expect(battery.low == nil)
+  }
+
+  @Test("Gives the lowest and highest readings, not the lowest and highest 10-minute averages")
+  func lowAndHighComeFromReadings() throws
+  {
+    let calendar = Calendar.current
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 15)))
+    let history = ReadingHistory(fileURL: nil)
+    // In the same 10-minute bucket, so the chart shows only their average.
+    history.record([sensor(temperature: 20, humidity: 30)], at: now - 3_600)
+    history.record([sensor(temperature: 20, humidity: 50)], at: now - 3_600 + 90)
+    let payload = try decode(history.payload(at: now))
+    let humidities = payload.series.filter
+    {
+      $0.kind == "humidity"
+    }
+    let humidity = try #require(humidities.first)
+    #expect(humidity.points.count == 1)
+    #expect(humidity.points.first?.last == 40)
+    #expect(humidity.low == 30)
+    #expect(humidity.high == 50)
+    let day = try #require(humidity.days?.last)
+    #expect(day.low == 30)
+    #expect(day.high == 50)
+    #expect(day.average == 40)
   }
 
   @Test("Keeps the samples of the whole first day in the file when it loads it, and moves older samples to the archive")
@@ -376,6 +402,8 @@ private struct DecodedPayload: Decodable
     var unit: String
     var maximum: Double?
     var showsLowHigh: Bool
+    var low: Double?
+    var high: Double?
     var points: [[Double]]
     var days: [Day]?
   }
