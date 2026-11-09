@@ -2,7 +2,7 @@ import Foundation
 import os
 
 /// Records numeric sensor readings and battery levels. The web page charts the readings of the last 7 days.
-/// The daily low and high are for full days, so the samples of the whole first day of the 7 stay too.
+/// The daily minimum, maximum, and median are for full days, so the samples of the whole first day of the 7 stay too.
 /// Older samples move to an archive file, and lines that the app can't use move to a rejected file.
 /// The app only appends to those two files, so no sample is lost.
 /// HomeKit keeps no history, so the record starts when the app first runs.
@@ -62,6 +62,8 @@ final class ReadingHistory: @unchecked Sendable
   private static let minimumSpacing: TimeInterval = 60
   /// An unchanged value is recorded this often, so lines continue and gaps mean missing data.
   private static let heartbeat: TimeInterval = 10 * 60
+  /// A sample counts toward the daily median for at most this long. The page breaks a chart line after the same time.
+  private static let gap: TimeInterval = 45 * 60
   private static let pruneInterval: TimeInterval = 6 * 60 * 60
 
   /// Nil when the history is in memory only, also after a file that can't be read couldn't move aside.
@@ -232,7 +234,7 @@ final class ReadingHistory: @unchecked Sendable
   }
 
   /// The JSON behind the History view: each reading's series for the last 7 days, averaged into 10-minute buckets,
-  /// its lowest and highest readings, and the low and high of each full day. The battery levels aren't in it.
+  /// its lowest and highest readings, and the minimum, maximum, and median of each full day. The battery levels aren't in it.
   func payload(at date: Date = .now) -> Data
   {
     let now = date.timeIntervalSince1970
@@ -281,7 +283,7 @@ final class ReadingHistory: @unchecked Sendable
         high = max(high, value)
       }
 
-      // The first day starts before the 7 days, and its low and high are for the full day too.
+      // The first day starts before the 7 days, and its values are for the full day too.
       let fullDays = samples.filter
       {
         $0.time >= firstDay
@@ -297,7 +299,7 @@ final class ReadingHistory: @unchecked Sendable
         low: low,
         high: high,
         points: Self.buckets(recent, convert: style.convert),
-        days: Self.days(fullDays, convert: style.convert)
+        days: Self.days(fullDays, now: now, convert: style.convert)
       ))
     }
     var recordingSince: Int?
@@ -352,8 +354,8 @@ final class ReadingHistory: @unchecked Sendable
     return points
   }
 
-  /// The lowest and highest reading of each day on the Mac's calendar, and the average of its 10-minute averages, oldest first.
-  private static func days(_ samples: [Sample], convert: (Double) -> Double) -> [HistoryPayload.Day]
+  /// The lowest, highest, and median reading of each day on the Mac's calendar, oldest first.
+  private static func days(_ samples: [Sample], now: TimeInterval, convert: (Double) -> Double) -> [HistoryPayload.Day]
   {
     let calendar = Calendar.current
     var days: [HistoryPayload.Day] = []
@@ -376,14 +378,8 @@ final class ReadingHistory: @unchecked Sendable
         high = max(high, value)
       }
 
-      let averages = buckets(daySamples, convert: convert)
-      var sum = 0.0
-      for point in averages
-      {
-        sum += point[1]
-      }
-
-      days.append(HistoryPayload.Day(date: dateText(day, calendar), low: low, high: high, average: sum / Double(averages.count)))
+      let median = Self.median(daySamples, end: min(nextDay, now), convert: convert)
+      days.append(HistoryPayload.Day(date: dateText(day, calendar), low: low, high: high, median: median))
     }
 
     for sample in samples
@@ -401,6 +397,51 @@ final class ReadingHistory: @unchecked Sendable
 
     flush()
     return days
+  }
+
+  /// The value that the reading was at or below for half of the counted time. Each sample counts until the next one,
+  /// for at most `gap` and never past `end`, so a device that reports often doesn't count more. The result is a reported value.
+  private static func median(_ samples: [Sample], end: TimeInterval, convert: (Double) -> Double) -> Double
+  {
+    var counted: [(value: Double, time: TimeInterval)] = []
+    var total = 0.0
+    for (index, sample) in samples.enumerated()
+    {
+      let next = index + 1 < samples.count ? samples[index + 1].time : end
+      let time = max(0, min(next, end, sample.time + gap) - sample.time)
+      counted.append((convert(sample.value), time))
+      total += time
+    }
+
+    // Only a sample from the moment of the request has no time yet. Then each sample counts once.
+    if total == 0
+    {
+      counted = counted.map
+      {
+        ($0.value, 1)
+      }
+
+      total = Double(counted.count)
+    }
+
+    counted.sort
+    {
+      $0.value < $1.value
+    }
+
+    var median = counted.first?.value ?? 0
+    var sum = 0.0
+    for entry in counted
+    {
+      median = entry.value
+      sum += entry.time
+      if sum >= total / 2
+      {
+        break
+      }
+    }
+
+    return median
   }
 
   /// A day on the Mac's calendar as text, such as "2026-11-01".
@@ -779,11 +820,11 @@ struct HistoryPayload: Encodable
     var high: Double
     /// [seconds since 1970, value in `unit`] pairs, oldest first.
     var points: [[Double]]
-    /// The low, high, and average of each day, oldest first, for the daily table.
+    /// The minimum, maximum, and median of each day, oldest first, for the daily table.
     var days: [Day]
   }
 
-  /// The low, high, and average of one full day, or of today since midnight, in the series' unit.
+  /// The minimum, maximum, and median of one full day, or of today since midnight, in the series' unit.
   struct Day: Encodable
   {
     /// The day on the Mac's calendar, such as "2026-11-01".
@@ -792,8 +833,8 @@ struct HistoryPayload: Encodable
     var low: Double
     /// The highest reading of the day.
     var high: Double
-    /// The average of the day's 10-minute averages.
-    var average: Double
+    /// The reading that the device was at or below for half of the day's counted time.
+    var median: Double
   }
 
   var now: Int

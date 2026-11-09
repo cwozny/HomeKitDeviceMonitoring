@@ -243,17 +243,19 @@ struct ReadingHistoryTests
     #expect(nextLaunch.recordingSince == first)
   }
 
-  @Test("Gives the low and high of each full day, also for the first day, which starts before the 7 days")
-  func dailyLowAndHighCoverFullDays() throws
+  @Test("Gives the min, max, and median of each full day, also for the first day, which starts before the 7 days")
+  func dailyValuesCoverFullDays() throws
   {
     let calendar = Calendar.current
     // In the afternoon, so the 7 days start in the afternoon of the first day.
     let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 15)))
     let windowStart = now - ReadingHistory.window
+    let lateEvening = try #require(calendar.date(bySettingHour: 23, minute: 30, second: 0, of: windowStart))
     let history = ReadingHistory(fileURL: nil)
     // The lowest humidity of the first day is in its morning, before the 7 days start.
     history.record([sensor(temperature: 20, humidity: 30)], at: calendar.startOfDay(for: windowStart) + 6 * 3_600)
-    history.record([sensor(temperature: 20, humidity: 50)], at: windowStart + 3_600)
+    // 50 counts for the 30 minutes until midnight, and the morning's 30 for 45 minutes, so 30 is the median.
+    history.record([sensor(temperature: 20, humidity: 50)], at: lateEvening)
     history.record([sensor(temperature: 20, humidity: 60)], at: now - 3_600)
     let payload = try decode(history.payload(at: now))
     let humidities = payload.series.filter
@@ -265,8 +267,9 @@ struct ReadingHistoryTests
     #expect(days.map(\.date) == ["2026-03-13", "2026-03-20"])
     #expect(days[0].low == 30)
     #expect(days[0].high == 50)
-    #expect(days[0].average == 40)
+    #expect(days[0].median == 30)
     #expect(days[1].low == 60)
+    #expect(days[1].median == 60)
     // The chart still starts when the 7 days start.
     #expect(humidity.points.count == 2)
   }
@@ -293,7 +296,65 @@ struct ReadingHistoryTests
     let day = try #require(humidity.days.last)
     #expect(day.low == 30)
     #expect(day.high == 50)
-    #expect(day.average == 40)
+    // 30 counts for 90 seconds, and 50 for 45 minutes.
+    #expect(day.median == 50)
+  }
+
+  @Test("Finds the daily median over time, so many quick readings don't outweigh a steady value")
+  func medianCountsTime() throws
+  {
+    let calendar = Calendar.current
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 15)))
+    let steady = now - 3 * 3_600
+    let history = ReadingHistory(fileURL: nil)
+    // 40 for 40 minutes, then five quick changes in 6 minutes, then 40 again for 45 minutes.
+    history.record([sensor(temperature: 20, humidity: 40)], at: steady)
+    for step in 0..<5
+    {
+      history.record([sensor(temperature: 20, humidity: Double(50 + step))], at: steady + 40 * 60 + Double(step) * 61)
+    }
+
+    history.record([sensor(temperature: 20, humidity: 40)], at: steady + 46 * 60)
+    let humidity = try humiditySeries(history.payload(at: now))
+    let day = try #require(humidity.days.last)
+    // If each reading counted once, the middle of the seven readings would be 51.
+    #expect(day.median == 40)
+  }
+
+  @Test("Counts a reading toward the daily median for at most 45 minutes, so a pause in recording doesn't count")
+  func medianStopsAfterGap() throws
+  {
+    let calendar = Calendar.current
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 15)))
+    let history = ReadingHistory(fileURL: nil)
+    // Nothing is recorded for 3 hours after the 30, so it counts for 45 minutes, not 3 hours.
+    history.record([sensor(temperature: 20, humidity: 30)], at: now - 6 * 3_600)
+    history.record([sensor(temperature: 20, humidity: 50)], at: now - 3 * 3_600)
+    // The unchanged value again after 11 minutes, so 50 counts for 11 and then 45 minutes.
+    history.record([sensor(temperature: 20, humidity: 50)], at: now - 3 * 3_600 + 11 * 60)
+    let humidity = try humiditySeries(history.payload(at: now))
+    let day = try #require(humidity.days.last)
+    #expect(day.median == 50)
+  }
+
+  @Test("Counts the last reading of a day toward its median until midnight, and the last reading of today until now")
+  func medianStopsAtDayEnd() throws
+  {
+    let calendar = Calendar.current
+    let now = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 20, hour: 15)))
+    let yesterday = try #require(calendar.date(byAdding: .day, value: -1, to: now))
+    let lateEvening = try #require(calendar.date(bySettingHour: 23, minute: 20, second: 0, of: yesterday))
+    let history = ReadingHistory(fileURL: nil)
+    // Yesterday: 30 for 25 minutes, then 50 for the 15 minutes until midnight.
+    history.record([sensor(temperature: 20, humidity: 30)], at: lateEvening)
+    history.record([sensor(temperature: 20, humidity: 50)], at: lateEvening + 25 * 60)
+    // Today: 30 for 20 minutes, then 50 for the 10 minutes until now.
+    history.record([sensor(temperature: 20, humidity: 30)], at: now - 30 * 60)
+    history.record([sensor(temperature: 20, humidity: 50)], at: now - 10 * 60)
+    let humidity = try humiditySeries(history.payload(at: now))
+    #expect(humidity.days.map(\.date) == ["2026-03-19", "2026-03-20"])
+    // If the last readings counted for 45 minutes, both medians would be 50.
+    #expect(humidity.days.map(\.median) == [30, 30])
   }
 
   @Test("Keeps the samples of the whole first day in the file when it loads it, and moves older samples to the archive")
@@ -565,6 +626,17 @@ struct ReadingHistoryTests
   {
     try JSONDecoder().decode(DecodedPayload.self, from: data)
   }
+
+  /// The humidity series of a history payload.
+  private func humiditySeries(_ data: Data) throws -> DecodedPayload.Series
+  {
+    let humidities = try decode(data).series.filter
+    {
+      $0.kind == "humidity"
+    }
+
+    return try #require(humidities.first)
+  }
 }
 
 /// The parts of the history JSON that the tests read.
@@ -585,7 +657,7 @@ private struct DecodedPayload: Decodable
     var date: String
     var low: Double
     var high: Double
-    var average: Double
+    var median: Double
   }
 
   var recordingSince: Int?

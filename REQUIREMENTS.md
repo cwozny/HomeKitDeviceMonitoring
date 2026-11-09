@@ -11,6 +11,7 @@ Each requirement uses "shall". A sentence without "shall" gives a definition, a 
 | Term | Meaning |
 |---|---|
 | Device | A sensor or other smart-home device in the home. |
+| Median | The value that a reading is at or below for half of the recorded time, and at or above for the other half. |
 | Reading | One value that a device reports, for example a temperature. The battery level is not a reading. |
 | Web page | The dashboard as a web browser shows it. |
 
@@ -34,7 +35,7 @@ Each requirement uses "shall". A sentence without "shall" gives a definition, a 
 ## History
 
 - **HIST-1** The web page shall have a separate view with a chart of each numeric reading of each device, for the last 7 days.
-- **HIST-2** The same view shall show the daily low and high of each numeric reading of each device, for each day in the last 7 days. Each daily low and high shall be for the full day, also for a day that starts before the 7 days. For today, they shall be for the readings since midnight.
+- **HIST-2** The same view shall show the daily minimum, maximum, and median of each numeric reading of each device, for each day in the last 7 days. These values shall be for the full day, also for a day that starts before the 7 days. For today, they shall be for the readings since midnight.
 - **HIST-3** If the software stops and starts again, the history shall stay.
 - **HIST-4** The software shall keep every reading and battery level that it records, with no time limit. The History view still shows only the last 7 days.
 - **HIST-5** The software shall record the battery level of each device that reports one. The History view shows no chart of the battery level.
