@@ -26,14 +26,16 @@ final class HomeStore: NSObject
   @ObservationIgnored private var hasReceivedHomes = false
   @ObservationIgnored private var isRefreshing = false
   @ObservationIgnored private var isDemo = false
-  /// When HomeKit last pushed a change, for the log.
+  /// When HomeKit last pushed a change, to find long pauses.
   @ObservationIgnored private var lastPush: Date?
+  /// True while the app signs up again for changes, so that another long pause doesn't start a second round.
+  @ObservationIgnored private var isSigningUpAgain = false
 
   /// Records HomeKit problems that the app works around without showing them. To read them on the host:
   /// log show --predicate 'subsystem == "<bundle ID>"' --last 1d
   private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "HomeSensors", category: "HomeKit")
-  /// A longer pause between pushes is logged. The history records samples only when something changes,
-  /// so a pause of more than 45 minutes breaks the chart lines.
+  /// A longer pause between pushes is logged, and then the app signs up again for changes. The history records
+  /// samples only when something changes, so a pause of more than 45 minutes breaks the chart lines.
   private static let longPause: TimeInterval = 10 * 60
 
   static func forLaunch() -> HomeStore
@@ -131,7 +133,7 @@ final class HomeStore: NSObject
         }
         catch
         {
-          // Tried again the next time the app loads this device, for example when it reconnects.
+          // Tried again the next time the app loads this device, for example when it reconnects, and after a long pause.
           Self.logger.error("Couldn't turn on notifications for \(item, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
       }
@@ -141,6 +143,92 @@ final class HomeStore: NSObject
       lastUpdate = .now
     }
     rebuild()
+  }
+
+  /// Signs up again for the changes of every tracked characteristic. This repairs a sign-up that the home hub lost,
+  /// for example when the primary home hub changed while this Mac couldn't learn about it. Then HomeKit sent only the
+  /// periodic status of the hub, with a long pause before each update.
+  private func signUpAgain() async
+  {
+    guard let manager, !isSigningUpAgain else
+    {
+      return
+    }
+
+    isSigningUpAgain = true
+    Self.logger.notice("Turning notifications off and on again, so that the home hub sends changes again")
+    let accessories = manager.homes.flatMap(\.accessories)
+    await withTaskGroup(of: Void.self)
+    {
+      group in
+      for accessory in accessories
+      {
+        group.addTask
+        {
+          await self.signUpAgain(for: accessory)
+        }
+      }
+    }
+
+    isSigningUpAgain = false
+  }
+
+  /// Signs up again for the changes of one device, one characteristic at a time.
+  private func signUpAgain(for accessory: HMAccessory) async
+  {
+    var switches: [any NotificationSwitch] = []
+    for characteristic in HomeKitMapping.trackedCharacteristics(of: accessory)
+    {
+      if characteristic.properties.contains(HMCharacteristicPropertySupportsEventNotification)
+      {
+        switches.append(characteristic)
+      }
+    }
+
+    for failure in await Self.signUpAgain(switches)
+    {
+      Self.logger.error("Couldn't turn notifications off and on for \(failure.name, privacy: .public): \(failure.error.localizedDescription, privacy: .public)")
+    }
+  }
+
+  /// Turns each notification off and on again, in turn, and returns the names and errors of those that failed.
+  /// HomeKit signs up with the home hub when a notification turns on. Turning on a notification that HomeKit thinks
+  /// is on doesn't reach the hub. A notification that stays off turns on after the next long pause, or when its
+  /// device responds again.
+  static func signUpAgain(_ switches: [any NotificationSwitch]) async -> [(name: String, error: Error)]
+  {
+    var failures: [(name: String, error: Error)] = []
+    for item in switches
+    {
+      do
+      {
+        if item.isNotificationEnabled
+        {
+          try await item.enableNotification(false)
+        }
+
+        try await item.enableNotification(true)
+      }
+      catch
+      {
+        failures.append((item.logName, error))
+      }
+    }
+
+    return failures
+  }
+
+  /// The whole minutes of a pause between pushes that is longer than `longPause`.
+  /// Nil for a shorter pause, and for the first push, which has no pause before it.
+  static func longPauseMinutes(from lastPush: Date?, to now: Date) -> Int?
+  {
+    guard let lastPush else
+    {
+      return nil
+    }
+
+    let pause = now.timeIntervalSince(lastPush)
+    return pause > longPause ? Int(pause / 60) : nil
   }
 
   private func attachDelegates()
@@ -300,13 +388,45 @@ extension HomeStore: @preconcurrency HMAccessoryDelegate
   func accessory(_ accessory: HMAccessory, service: HMService, didUpdateValueFor characteristic: HMCharacteristic)
   {
     let now = Date.now
-    if let lastPush, now.timeIntervalSince(lastPush) > Self.longPause
+    if let minutes = Self.longPauseMinutes(from: lastPush, to: now)
     {
-      Self.logger.notice("No push came for \(Int(now.timeIntervalSince(lastPush) / 60)) minutes")
+      Self.logger.notice("No push came for \(minutes) minutes")
+      // After a lost sign-up, a push like this one is often a periodic status update from the home hub.
+      Task
+      {
+        await signUpAgain()
+      }
     }
+
     lastPush = now
     lastUpdate = now
     rebuild()
+  }
+}
+
+/// A characteristic whose change notifications the app can turn on and off. HMCharacteristic is one, and the tests
+/// use a stand-in.
+protocol NotificationSwitch: AnyObject
+{
+  /// The names of the device and the characteristic, for the log.
+  var logName: String
+  {
+    get
+  }
+
+  var isNotificationEnabled: Bool
+  {
+    get
+  }
+
+  func enableNotification(_ enable: Bool) async throws
+}
+
+extension HMCharacteristic: NotificationSwitch
+{
+  var logName: String
+  {
+    "\(service?.accessory?.name ?? "A device") \(localizedDescription)"
   }
 }
 
